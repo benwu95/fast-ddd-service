@@ -11,7 +11,7 @@
 - 原 repo 的 `copy_tool.py`（複製佔位檔再手動改名填寫）由 skill 取代；固定的骨架檔案由 copier 產生。
 - 範圍內的架構改動只有以下幾類，其餘一律忠實搬移：
   - 新 tech stack 強制的改動；
-  - 本計劃明確列出的改善項目：紀錄機制（第 7.5 節）、批次處理（第 8 節）、API 設計（第 9 節）、預設產生的範圍（第 14 節）；
+  - 本計劃明確列出的改善項目：紀錄機制（第 7.5 節）、批次處理（第 8 節）、API 設計（第 9 節）、背景工作（第 11.1 節）、預設產生的範圍（第 14 節）；
   - 原版既有的資安漏洞修正（第 10 節）；
   - 原版缺少的執行環境基礎設施（第 12 節）。
 
@@ -51,6 +51,7 @@ fast-ddd-service/
 - **git tag 的版本號**：template 中的 kernel 版本是一個明確的常數（`copier.yml` 的 `kernel_version`，發布時和 plugin.json 的 `version` 一起調整），不使用 copier 的 `_commit` 變數。`_commit` 是 template 的 git describe 字串（例如 `v0.1.0-3-ga9258e4`），每個 commit 都不同，也不是有效的 kernel 版本；任何骨架檔案都不可以渲染 `{{ _commit }}`。
 - **版本**：plugin、kernel、template 共用同一個版本號和 git tag。plugin.json 的 `version` 沒變時，已安裝的使用者不會收到更新，所以發布時一定要同步調整。
 - **自動啟用**：template 產生的服務在 `.claude/settings.json` 寫入 `extraKnownMarketplaces` 和 `enabledPlugins`（`fast-ddd@<marketplace>`）。plugin source 是 relative path，所以 trust 這個 repo 後就會自動載入。
+- **機密檔案的保護**：同一份 `.claude/settings.json` 的 `permissions.deny` 禁止讀取 `.env*`、`*.pem`、`*.key`、憑證檔案，以及執行 `env`、`printenv` 這類會輸出環境變數的指令。設定和機密一律從環境變數讀取，不寫進任何會被 commit 的檔案（包括 pytest 設定）。
 - **template 和參考服務的關係**：Phase 1 先手寫 `example/`；Phase 2 從 `example/` 抽出 template。之後 CI 對 `example/` 執行 `copier recopy --overwrite --defaults --vcs-ref HEAD`（以 `.copier-answers.yml` 的答案、用目前這個 commit 的 template 重新產生骨架檔案），再用 `git diff --exit-code -- example ':(exclude)example/.copier-answers.yml'` 確認骨架檔案沒有差異。`.copier-answers.yml` 必須排除：copier 會把 template 的 commit（`_commit`）寫進這個檔案，而已 commit 的檔案不可能包含自己所在 commit 的 hash，比對永遠會有差異（已實測，copier 9.19）。必須加 `--vcs-ref HEAD`：不指定時 copier 會改用最新的 git tag（`copier recopy --help` 的說明），比對到的是上一次發布的 template。不用 `copier update`：它是三方合併，會保留 `example/` 裡的手動修改，偵測不到骨架檔案被直接改動。
 - **skill 的開發流程**：發布前，把本機的 repo 路徑加成 marketplace 來源，載入未發布的版本測試；確認後再調整 version、打 tag。
 
@@ -68,12 +69,15 @@ fast-ddd-service/
 | 時間 | pendulum | 3.3.x（有 `py.typed`，支援 3.10–3.14） |
 | JWT | PyJWT | 2.15.x |
 | HTTP client（JWKS、測試） | httpx2 | 2.13.x |
+| 背景工作 | PgQueuer（asyncpg driver），包在 kernel 的 `TaskQueue` 介面後面 | 1.6.x，鎖定版本 |
 | 型別檢查 | pyright strict | 1.1.41x |
 | 套件管理 | uv | — |
 | Lint／format | ruff | — |
 | 架構檢查 | import-linter | — |
 | 測試 | pytest、testcontainers | — |
-| 可觀測性 | OpenTelemetry | — |
+| 可觀測性 | OpenTelemetry（tracing 和 metrics） | SDK 1.45.x |
+| Git hook | pre-commit、conventional-pre-commit | 4.7.x、4.4.x |
+| 即時推播（recipe） | python-socketio（RabbitMQ manager 需要 aio-pika） | 5.17.x |
 
 Python 最低版本訂為 3.13，與原 repo 的 `pyproject.toml` 一致。PEP 695 泛型語法（原 repo 已經使用 `type` 語句）也需要 ≥ 3.12。
 
@@ -88,7 +92,7 @@ Python 最低版本訂為 3.13，與原 repo 的 `pyproject.toml` 一致。PEP 6
 | `werkzeug.LocalProxy` + `# type: ignore` | `ContextVar` + 有型別的 getter | 拿掉 Connexion 後 werkzeug 只剩這個用途；pyright strict 也無法通過 |
 | `TypeVar`／`Generic` | PEP 695 泛型 | typing 目標 |
 | `app/config.py` | pydantic-settings | 型別化、從環境變數讀取 |
-| gunicorn + uvicorn worker | uvicorn 單一 process | 每個容器一個 process，由平台橫向擴展；見第 12.3 節 |
+| gunicorn + uvicorn worker | uvicorn 單一 process | 每個容器一個 process，由平台橫向擴展；見第 12.4 節 |
 | `ddd_base` 複製進每個服務 | kernel 拆成依層命名的套件 | 見第 6.1 節 |
 | datetime 對外輸出 unix timestamp（domain_event body 卻用 `isoformat()`） | 統一為 RFC 3339 字串（UTC、`Z`、毫秒） | 主流指南和多數 API 的做法；見第 7.1 節 |
 | dataclass-mixins（controller 的 request／response，原版放在 adapter 層的 `request.py`／`response.py`） | port 層的 Pydantic `RequestModel`／`ResponseModel`，加上 adapter 層的 command dataclass | FastAPI／FastStream 本身就用 Pydantic 驗證和產生 schema；adapter 不可以 import port，所以 controller 的輸入改用 adapter 層自己的型別。見第 7.1 節 |
@@ -99,7 +103,7 @@ Python 最低版本訂為 3.13，與原 repo 的 `pyproject.toml` 一致。PEP 6
 | `Tracer` 自己產生 UUID 格式的 trace／span id | trace id 沿用 OpenTelemetry；事件用 `event_id` 串連因果關係 | 見第 12.1 節 |
 | `UseCaseBase` 用 instance 屬性（`_trace_id`、`_parent_event`）傳遞 tracing，處理第一個 aggregate 後就清掉 parent | 改用 `fast_ddd.context` 的 ContextVar，`UseCaseBase` 不再有可變狀態 | controller 是 module 層級的單一實例（原版 `app/adapter/controller/__init__.py`），並行請求會互相覆蓋；批次中只有第一個 aggregate 帶到 parent。見第 12.1 節 |
 | `SessionProvider` 巢狀計數，但 `__aexit__` 不論有無例外都 commit；`EventHandlerHelper` 在巢狀 scope 中直接 `rollback()` | 只有最外層 scope 可以 commit 或 rollback；`__aexit__` 遇到例外時 rollback | 巢狀 scope 的 rollback 會丟掉外層的 transaction。見第 8.2 節 |
-| import 時建立全域預設的 `SessionProvider` 和 publisher，HTTP middleware 再逐請求覆蓋 | 不在 import 時建立；由 kernel 的 HTTP unit-of-work middleware 和 MQ subscriber wrapper 為每個請求、每則訊息建立並在結束時清除 | FastStream 同時處理多則訊息時會共用同一個 session。見第 12.4 節 |
+| import 時建立全域預設的 `SessionProvider` 和 publisher，HTTP middleware 再逐請求覆蓋 | 不在 import 時建立；由 kernel 的 HTTP unit-of-work middleware 和 MQ subscriber wrapper 為每個請求、每則訊息建立並在結束時清除 | FastStream 同時處理多則訊息時會共用同一個 session。見第 12.6 節 |
 | adapter import `app.port.storage.sql.postgres.DB_Session` | `app/bootstrap.py` 建立 engine、session factory、broker，注入 kernel | 新的分層 contract 禁止 adapter → port。見第 6.3 節 |
 | controller 用 `*requests` 參數，回傳 `list[str] \| str` | 單筆和批次分開，回傳型別明確 | typing 目標；code-first schema 不要出現 `oneOf` |
 | 逐筆 load／save、每筆一個 transaction | 批次 I/O 加逐筆 fallback | 見第 8 節 |
@@ -135,8 +139,8 @@ import-linter 不會分析已安裝外部套件的內部，而且外部套件只
 | 套件 | 層 | 內容 | 允許的外部相依 |
 |---|---|---|---|
 | `fast_ddd` | core | `AggregateRoot`、`DomainEvent`、`EventBus`、`UseCaseBase`、`BatchResult` 和批次流程 helper、`DomainError` 和 `ErrorKind`、`Repository[Id, Aggregate]` Protocol（`load_many`／`save_many`，批次 helper 依賴它，pyright strict 才能檢查型別）、ID 型別、事件序列化工具、`context`（目前的使用者、organization id、trace id、parent event id 的 ContextVar，只依賴 stdlib；controller 從這裡取得使用者，組成 domain 方法需要的 `doer` 參數） | pendulum |
-| `fast_ddd_adapter` | adapter | `SessionProvider`、`RepositoryBase`（實作 `fast_ddd` 的 `Repository` Protocol：`load_many`／`save_many`、tenant 過濾、archive）、`UNSET` sentinel（PATCH command 用，第 7.1 節）、`TypeDecorator`、domain_event ORM model、MQ inbox ORM model、controller base 和批次 runner（含事件分派，第 8.2 節步驟 4）、IntegrityError 轉換、MQ publisher（訊息暫存由 `SessionProvider` 擁有）、`system_context()`、SQL 語句計數器 | SQLAlchemy、FastStream、pendulum |
-| `fast_ddd_port` | port | `KernelSettings`、`RequestModel`／`ResponseModel`／`MessageModel`、`Timestamp`、`DecimalStr`、problem+json 和錯誤代碼處理、JWT 驗證、權限 dependency、CORS 設定、health endpoint、HTTP 的 unit-of-work middleware（第 12.4 節）、MQ 的 subscriber wrapper（第 11 節，同時負責每則訊息的 context）、錯誤代碼目錄產生器 | FastAPI、Pydantic、FastStream、OpenTelemetry、pendulum、PyJWT、httpx2 |
+| `fast_ddd_adapter` | adapter | `SessionProvider`、`RepositoryBase`（實作 `fast_ddd` 的 `Repository` Protocol：`load_many`／`save_many`、tenant 過濾、archive）、`UNSET` sentinel（PATCH command 用，第 7.1 節）、`TypeDecorator`、domain_event ORM model、MQ inbox ORM model、controller base 和批次 runner（含事件分派，第 8.2 節步驟 4）、IntegrityError 轉換、MQ publisher（訊息暫存由 `SessionProvider` 擁有）、`TaskQueue` 介面和 PgQueuer 實作（第 11.1 節）、`system_context()`、SQL 語句計數器 | SQLAlchemy、FastStream、pendulum、PgQueuer |
+| `fast_ddd_port` | port | `KernelSettings`、`RequestModel`／`ResponseModel`／`MessageModel`、`Timestamp`、`DecimalStr`、problem+json 和錯誤代碼處理、JWT 驗證、權限 dependency、CORS 設定、health endpoint、HTTP 的 unit-of-work middleware（第 12.6 節）、MQ 的 subscriber wrapper（第 11 節，同時負責每則訊息的 context）、背景工作的 task wrapper（第 11.1 節）、錯誤代碼目錄產生器 | FastAPI、Pydantic、FastStream、OpenTelemetry、pendulum、PyJWT、httpx2、PgQueuer |
 
 ### 6.2 import-linter contracts
 
@@ -147,8 +151,11 @@ import-linter 不會分析已安裝外部套件的內部，而且外部套件只
 - `forbidden`：`app.adapter` 不得 import `fast_ddd_port`、`fastapi`。
 - `forbidden`：`app.port` 不得 import `app.adapter.repository`（port 只能透過 controller 使用 adapter，不直接存取 repository），設定 `allow_indirect_imports = True`。forbidden contract 預設會檢查間接 import，而 port → controller → repository 正是設計要求的路徑；實測（import-linter）不設定時這條鏈會被判定為違規。
 - `independence`：各 bounded context 的 `core` 之間互相獨立。
+- 根設定加上 `unmatched_ignore_imports_alerting = error`：`ignore_imports` 中已經不存在的例外會直接報錯，例外清單只能縮小、不會殘留失效的項目。
+- **contract 涵蓋檢查**：import-linter（底層的 grimp）不分析沒有 `__init__.py` 的目錄，裡面的 import 會被靜默略過。kernel 提供一個檢查指令，納入 `make check`：`app/` 下每個目錄都必須是一般套件（有 `__init__.py`），而且每個最上層模組都至少出現在一條 contract 中。這個檢查本身也要有測試。
 - `forbidden`：`app.core`、`app.adapter` 不得 import `app.settings`（第 6.3 節）。
-- `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `app.bootstrap`、`app.wiring`、`app.main`、`app.consumer`（第 6.3 節：只有進入點可以 import 組裝點和接線）。
+- `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `app.bootstrap`、`app.wiring`、`app.main`、`app.consumer`、`app.task_worker`（第 6.3 節：只有進入點可以 import 組裝點和接線）。
+- `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `pgqueuer`（第 11.1 節：PgQueuer 只能出現在 kernel 的實作中，服務一律透過 `TaskQueue` 介面使用）。
 
 kernel 端（根設定同樣要有 `include_external_packages = True`；實測不設定時，禁止外部套件的 forbidden contract 會直接報錯）：
 
@@ -164,9 +171,10 @@ kernel 端（根設定同樣要有 `include_external_packages = True`；實測�
 |---|---|---|
 | `app/settings.py` | 服務自己的設定（不是 template 檔案，第一次產生後由服務維護）：繼承 kernel 提供的 `KernelSettings`（`fast_ddd_port`，包含 DB、broker、JWT、CORS 等 kernel 需要的設定），再加上服務自己的欄位（例如其他服務的 URL） | port、`app/bootstrap.py`、`app/wiring.py`；core 和 adapter 都不可以（`app.settings` 繼承了 `fast_ddd_port` 的 `KernelSettings`，adapter import 它會間接 import `fast_ddd_port`，違反「`app.adapter` 不得 import `fast_ddd_port`」的 contract，已實測）。adapter 需要的設定值由 `wire_resources(settings)` 或 kernel 的 `configure(...)` 在啟動時傳入。另加 `forbidden`：`app.core`、`app.adapter` 不得 import `app.settings` |
 | `app/bootstrap.py` | 組裝點（template 檔案，各服務不修改）：建立 engine、session factory、FastStream broker、publisher、`EventBus` 實例，注入 kernel（例如 `fast_ddd_adapter.configure(session_factory=..., event_bus=...)`）；設定 OpenTelemetry 和 log；呼叫 `wire_resources(settings)` 和 `wire_events(bus)` | 只有 `app/main.py`、`app/consumer.py` |
-| `app/wiring.py` | 服務自己的接線（不是 template 檔案），依角色分成四個函式：`wire_resources(settings)` 建立服務自己的基礎設施（例如呼叫其他服務的 HTTP client），存進服務自己的 `app/adapter/resources.py`（有型別的 getter，未設定時報錯，和 kernel 的 `configure` 同樣模式），回傳需要在關閉時釋放的資源，由 FastAPI lifespan／FastStream 的 shutdown 釋放；`wire_events(bus)` 註冊 in-process event handler（`bus.subscribe(EventType, handler)`，兩個 process 都需要）；`wire_http(app)` 註冊 FastAPI router；`wire_consumer(broker)` 註冊 FastStream subscriber。不在 import 時用 decorator 註冊到全域的 `event_bus`（原版的做法），因為 `EventBus` 實例改由 bootstrap 建立 | `app/bootstrap.py`、`app/main.py`、`app/consumer.py` |
+| `app/wiring.py` | 服務自己的接線（不是 template 檔案），依角色分成五個函式：`wire_resources(settings)` 建立服務自己的基礎設施（例如呼叫其他服務的 HTTP client），存進服務自己的 `app/adapter/resources.py`（有型別的 getter，未設定時報錯，和 kernel 的 `configure` 同樣模式），回傳需要在關閉時釋放的資源，由 FastAPI lifespan／FastStream 的 shutdown 釋放；`wire_events(bus)` 註冊 in-process event handler（`bus.subscribe(EventType, handler)`，兩個 process 都需要）；`wire_http(app)` 註冊 FastAPI router；`wire_consumer(broker)` 註冊 FastStream subscriber；`wire_tasks(registry)` 註冊背景工作的 handler 和排程（第 11.1 節）。不在 import 時用 decorator 註冊到全域的 `event_bus`（原版的做法），因為 `EventBus` 實例改由 bootstrap 建立 | `app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py` |
 | `app/main.py` | template 檔案：建立 FastAPI app、掛上 kernel 的 middleware，呼叫 bootstrap 和 `wire_http(app)` | 進入點，沒有人 import |
 | `app/consumer.py` | template 檔案：建立 FastStream app，呼叫 bootstrap 和 `wire_consumer(broker)` | 進入點，沒有人 import |
+| `app/task_worker.py` | template 檔案：建立背景工作的 worker，呼叫 bootstrap 和 `wire_tasks(registry)`（第 11.1 節） | 進入點，沒有人 import |
 
 原版的 `app.trace`、`app.logger`、`app.package_instance` 分別由 `fast_ddd.context`、`app/bootstrap.py` 的 log 設定、kernel 的 unit-of-work middleware 取代。
 
@@ -313,7 +321,7 @@ N 筆就要大約 6N 次往返，再加上 handler 的負擔。另外還有兩�
   - **新建與既有的判斷**：`version == 0` 代表新建，不需要先查資料庫（原版用 `session.get` 判斷，每個新 id 都多一次查詢）。
   - **version 和時間戳**：新建時 `version` 設為 1，`created_at` 和 `updated_at` 相同；既有的 aggregate 經過 `entity_to_model` 後，只要整個 aggregate 有任何變更，`version` 加 1、`updated_at` 更新為現在時間。「有變更」以整個 aggregate 判斷：root 的 ORM model、每一個已載入的子 entity model 任一個 `session.is_modified()` 為真，或有子資料列被新增、刪除。只檢查 root 不夠：實測（SQLAlchemy 2.1.5）只改子 entity 的欄位時，`session.is_modified(root)` 回傳 `False`，version 不會遞增，兩個持有同一個 ETag 的使用者會互相覆蓋對方對子資料的修改。沒有變更時兩者都不變。依「資料是否變更」判斷，不依「有沒有事件」判斷：如果某個 domain 方法改了狀態卻忘了發事件，version 照樣會遞增，ETag 的保護不會失效。新的值寫回 domain 物件，回應的 `ETag` 和時間才會正確。
   - **event handler 不可以再儲存「這次指令本身」儲存的 aggregate**：controller base 或批次 runner 記錄自己這次呼叫的 use case 所儲存的 aggregate（也就是回應會用到的那些；紀錄放在 `SessionProvider` 中，和 MQ 訊息暫存一樣隨 SAVEPOINT 標記與回復，見下方批次 runner），event handler（步驟 4）再次儲存其中任何一個時丟出例外。其他 aggregate 不受限制：例如 A、B 兩個事件的 handler 都去更新同一個父 aggregate P，P 在同一個 transaction 中被儲存兩次是允許的（每次儲存都依變更遞增 version）。如果限制所有 aggregate，這種常見的寫法會讓整批失敗、重送後仍然失敗，最後整則訊息送進 DLQ。原因：回應是由步驟 3 寫回的 domain 物件建構的，handler 再修改同一個 aggregate，回應的 body 和 `ETag` 就會過時，前端下一次帶 `If-Match` 會得到 412。需要連帶修改同一個 aggregate 的邏輯，應該寫在原本的 domain 方法裡。（原版的 `handle_your_aggregate_created` 就是在 handler 中修改同一個 aggregate，新版不沿用這個寫法。）
-- **鎖定逾時**：kernel 透過 asyncpg 連線的 `server_settings`（SQLAlchemy `create_async_engine(connect_args={"server_settings": {...}})`）設定 `lock_timeout`（預設 5 秒）和 `statement_timeout`（預設 30 秒），可由設定調整。在連線層設定，不需要每個 transaction 多一次 `SET LOCAL` 往返。一次鎖住 100 列時，遇到衝突不會無限等待；逾時和 deadlock 回 409 `concurrency.lock_conflict`（第 9.5 節）。
+- **鎖定逾時與連線保護**：kernel 透過 asyncpg 連線的 `server_settings`（SQLAlchemy `create_async_engine(connect_args={"server_settings": {...}})`）設定 `lock_timeout`（預設 5 秒）、`statement_timeout`（預設 30 秒）、`idle_in_transaction_session_timeout`（預設 60 秒，避免忘了結束的 transaction 一直持有鎖和連線）、`application_name`（服務名稱加 process 角色，例如 `my-service:api`，在 `pg_stat_activity` 中辨識連線來源），可由設定調整。在連線層設定，不需要每個 transaction 多一次 `SET LOCAL` 往返。一次鎖住 100 列時，遇到衝突不會無限等待；逾時和 deadlock 回 409 `concurrency.lock_conflict`（第 9.5 節）。
 - 單筆的 `load`／`save` 只是 `load_many([id])`／`save_many([agg])` 的包裝，kernel 只維護一套實作。
 - 查不到的 id 不丟例外，由呼叫端根據 `load_many` 回傳的 dict 判斷。
 - `tenant_scope = "organization"` 的 repository，`load_many` 和搜尋一律帶 tenant 過濾（見第 10.2 節；`"global"` 的 repository 和 `system_context()` 例外），所以批次中屬於其他組織的 id 會被當成「找不到」。
@@ -361,8 +369,12 @@ N 筆就要大約 6N 次往返，再加上 handler 的負擔。另外還有兩�
 - **鎖定逾時或 deadlock**：runner 的規則以「階段 + 例外類型」決定，不以步驟決定（整批處理階段中，步驟 1–3 在同一次 use case 呼叫內，runner 無法分辨例外來自哪一步）：
   - 整批處理階段發生時：整個請求回 409 `concurrency.lock_conflict`，不進入 fallback。鎖定衝突是暫時性的，逐筆重試只會再撞一次，由 client 重送整批即可。
   - 逐筆 fallback 階段發生時：只有該筆結果為 409 `concurrency.lock_conflict`（adapter 轉成 `ErrorKind.CONFLICT` 的 `DomainError`）。
-- **transaction 由誰開啟**：HTTP 端，第 12.4 節的 middleware 只建立新的 `SessionProvider`，不開啟 transaction；最外層的 scope 由 controller base（單筆操作）或批次 runner（批次操作）開啟。MQ 端由 kernel 的 subscriber wrapper 開啟最外層 scope（見第 11 節）。
-- **MQ 訊息暫存由 `SessionProvider` 擁有**：暫存和「已儲存的 aggregate」紀錄都放在 `SessionProvider` 中；rollback 和 SAVEPOINT 回復時一併處理；最外層 `__aexit__` commit 成功後由它發送暫存的訊息。controller base、批次 runner、subscriber wrapper 都不自己發送，也不需要判斷自己是不是最外層。發送失敗時，`SessionProvider` 只寫 error log，不丟出例外：資料已經 commit，回 500 會讓 client 重送、得到 409，逐筆 fallback 中也會中斷剩下的筆數。HTTP 和 MQ 都適用這條規則（第 11 節「發送失敗仍然 ack」是它的結果）。
+- **transaction 由誰開啟**：HTTP 端，第 12.6 節的 middleware 只建立新的 `SessionProvider`，不開啟 transaction；最外層的 scope 由 controller base（單筆操作）或批次 runner（批次操作）開啟。MQ 端由 kernel 的 subscriber wrapper 開啟最外層 scope（見第 11 節）。
+- **`SessionProvider` 的 after-commit 和 rollback hook**：`SessionProvider` 提供兩種 hook，MQ 訊息暫存是 after-commit hook 的一種用法，即時推播（第 14.3 節）也是。
+  - `after_commit(callable)`：最外層 commit 成功後依序執行，只能做 I/O（發送 MQ 訊息、推播），不可以再寫資料庫。註冊時記在目前的 scope，rollback 和 SAVEPOINT 回復時，該範圍內註冊的 hook 一併丟棄。
+  - `on_rollback(callable)`：最外層 rollback 之後執行，用於需要在另一個 transaction 中記錄失敗的情況（例如把某筆工作標記為失敗）；它自行開啟新的 transaction。
+  - 「已儲存的 aggregate」紀錄和待分派事件清單也放在 `SessionProvider` 中，同樣隨 rollback 和 SAVEPOINT 回復。
+- **MQ 訊息暫存由 `SessionProvider` 擁有**：adapter 的 publisher 把訊息註冊為 after-commit hook；最外層 `__aexit__` commit 成功後由 `SessionProvider` 執行這些 hook。controller base、批次 runner、subscriber wrapper 都不自己發送，也不需要判斷自己是不是最外層。after-commit hook 失敗時，`SessionProvider` 只寫 error log，不丟出例外，其餘 hook 照常執行：資料已經 commit，回 500 會讓 client 重送、得到 409，逐筆 fallback 中也會中斷剩下的筆數。HTTP 和 MQ 都適用這條規則（第 11 節「發送失敗仍然 ack」是它的結果）。
 - **巢狀呼叫一律包 SAVEPOINT**：controller base 和批次 runner 不是最外層時（例如在 event handler 或 MQ subscriber 中被呼叫），把這次呼叫包在 `SessionProvider.savepoint()` 中。被轉換成 `DomainError` 的資料庫錯誤因此只會 rollback 這個 SAVEPOINT，外層呼叫者可以安全地捕捉它並繼續，不會在已經 aborted 的 transaction 上執行。
 - **event handler 丟出的 `DomainError`**：分派事件的 controller base 或批次 runner 把它當成未預期的失敗（`UnexpectedFailure`）處理：HTTP 回 500，MQ 依「其他例外」重新排隊。原因：handler 的失敗不是這個指令本身的業務拒絕；如果照錯誤本身的類型處理，HTTP client 會收到一個指向它沒有操作過的資源的 404，MQ 則會 rollback 後 ack，讓這則訊息的工作靜默消失。
 - **所有 use case 呼叫都經過 controller base 或批次 runner**：HTTP handler、MQ subscriber、in-process event handler 都一樣。它們在目前的 scope 下巢狀執行，並負責步驟 4 的事件分派。event handler 呼叫 use case 後產生的事件，因此也會被分派、也能被 adapter 的 event handler 放進 MQ 暫存。原版的 `EventHandlerHelper` 直接呼叫 use case、由 `UseCaseBase._save` 分派事件；新版事件分派已移出 core，照原版寫法直接呼叫 use case，新產生的事件會寫進 domain_event 卻沒有被分派，而且不會報錯。所以 kernel 不提供 `EventHandlerHelper`，event handler 一律透過 controller 呼叫 use case。
@@ -707,18 +719,18 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
   - 建立時，會建立 aggregate 的 use case 方法有一個明確的 `organization_id` 參數，傳給 aggregate 的 factory。controller 從 `fast_ddd.context` 取得目前的 organization id 填入；在 `system_context()` 中則由呼叫者明確指定。core 不讀取 context 中的 organization id，也不需要知道目前是否在 `system_context()` 中。
   - 儲存、寫入 domain_event、發送 MQ 訊息時，`organization_id` 一律取自 aggregate，不取自 context。這樣在 `system_context()` 下一次處理多個組織的資料時，每個事件仍然帶著正確的組織。
   - `tenant_scope = "global"` 的 aggregate，`organization_id` 為 `None`，事件的 `organizationId` 為 `null`（第 7.4 節）。
-- **tenant context 的來源**（存在 `fast_ddd.context` 的 ContextVar，由第 12.4 節的 middleware 設定和清除）：
+- **tenant context 的來源**（存在 `fast_ddd.context` 的 ContextVar，由第 12.6 節的 middleware 設定和清除）：
   - HTTP request：從 JWT 的組織 claim 取得（第 10.3 節）。
   - MQ consumer：從訊息的 `organizationId` 取得（第 7.4 節）。
   - process 內的 event handler：`EventBus` 分派事件時，把 organization context 設為事件的 `organization_id`，並取消 `system_context()` 的豁免，handler 結束後還原（和 parent event id 的處理方式相同，第 12.1 節）。handler 一律在事件所屬組織的範圍內執行，不會因為觸發它的指令剛好在 `system_context()` 中而失去 tenant 過濾。
   - 需要跨 tenant 的操作（例如處理全域事件的 MQ handler）：使用 `fast_ddd_adapter` 提供的 `system_context()` 明確豁免過濾，每次使用都寫 log。`system_context()` 只在既有的 unit of work（HTTP 請求或 MQ 訊息）中切換「豁免 tenant 過濾」，不建立 `SessionProvider` 或其他 context。在 `system_context()` 中建立 aggregate 時，呼叫者必須明確傳入 `organization_id` 參數。
-  - 系統排程、CLI 這類 HTTP 和 MQ 以外的進入點，v1 不支援（第 17 節）；需要定期執行的工作，由外部排程器發送 MQ 訊息觸發，走 subscriber wrapper 的 unit of work。測試則由 kernel 的測試工具建立和 middleware 相同的 context。
+  - 定期執行的工作由背景工作的排程觸發（第 11.1 節），走 task wrapper 的 unit of work；排程工作沒有組織 context，需要處理組織資料時使用 `system_context()`，並逐一明確指定 `organization_id`。CLI 這類其他進入點，v1 不支援（第 17 節）。測試則由 kernel 的測試工具建立和 middleware 相同的 context。
 - **沒有 organization context 時**：organization id 為 `None`（例如處理全域事件時）且不在 `system_context()` 中，`tenant_scope = "organization"` 的 repository 被呼叫、或 controller 要建立 organization 範圍的 aggregate 時，一律丟出程式錯誤（500），不靜默查不到資料，也不建立沒有組織的資料。
 
 ### 10.3 認證與授權
 
 - **JWT 驗證**（`fast_ddd_port`）：
-  - 在第 12.4 節的 HTTP unit-of-work middleware 中驗證，驗證通過後才設定 organization id 等 context；這樣 context 在進入 router 之前就已經確定。不需要認證的路徑（health、OpenAPI 文件）由設定列出白名單。權限檢查（`require()`）仍是 endpoint 的 dependency，讀取 middleware 驗證過的 claims。
+  - 在第 12.6 節的 HTTP unit-of-work middleware 中驗證，驗證通過後才設定 organization id 等 context；這樣 context 在進入 router 之前就已經確定。不需要認證的路徑（health、OpenAPI 文件）由設定列出白名單。權限檢查（`require()`）仍是 endpoint 的 dependency，讀取 middleware 驗證過的 claims。
   - 簽章金鑰從 JWKS URL 取得並快取；遇到未知的 `kid` 時重新取得，以支援金鑰輪替。
   - 函式庫：簽章驗證用 PyJWT（2.15）；JWKS 用 httpx2（2.13，pydantic 維護）的 async client 取得，由 kernel 自行快取。不用 PyJWT 內建的 `PyJWKClient`：它以同步的 urllib 取得 JWKS，快取過期時會阻塞 event loop。選 httpx2 而不是 httpx，是因為 Starlette 1.8 的 `TestClient` 已經提示 httpx 改用 httpx2（實測時的 deprecation warning），測試和正式程式碼用同一個 HTTP client。
   - 驗證 `iss`、`aud`、`exp`、`nbf`；演算法採白名單（例如 RS256、ES256），拒絕 `none`。
@@ -749,6 +761,44 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 - **冪等性（inbox）**：RabbitMQ 是 at-least-once，同一則訊息可能被處理多次。kernel 提供 `processed_message` 表（主鍵為 `(subscriber, event_id)`）：consumer 在處理訊息的同一個 transaction 中插入這一組值，插入衝突代表這個 subscriber 已經處理過，直接 ack 並略過。主鍵包含 subscriber 名稱，因為同一個服務裡可能有多個 subscriber 處理同一個事件，只用 `eventId` 會讓第二個 subscriber 被誤判為已處理。
 - 測試：`TestRabbitBroker` 做單元測試（不支援 dynamic subscriber）；整合測試用 testcontainers 起真正的 RabbitMQ，涵蓋重送、DLQ 和重複訊息。
 
+### 11.1 背景工作（TaskQueue）
+
+**用途與分工**：MQ（FastStream）負責服務之間的整合事件；背景工作負責服務自己觸發、需要非同步執行的工作，例如匯出、匯入、需要退避重試的外部呼叫、延遲執行、定期執行。兩者分開：背景工作不能遺失（使用者看得到「工作不見了」），所以用 Postgres 當佇列，排入工作和業務資料寫在同一個 transaction 裡，沒有 MQ「commit 之後才發送、發送失敗就遺失」的問題。
+
+**介面**：`fast_ddd_adapter` 定義 `TaskQueue` 介面，v1 用 PgQueuer 實作。
+
+- 介面只包含需要的操作：`enqueue(task_name, payload, *, delay=None, dedupe_key=None)`，以及在 worker 端註冊 handler 和 cron 排程。
+- PgQueuer 只能出現在 kernel 的實作中，服務的程式碼一律透過 `TaskQueue` 使用（import-linter 的 forbidden contract，第 6.2 節）。PgQueuer 的 1.0 在 2026 年 5 月才發布、只有一位維護者，這層介面讓日後換成其他實作（例如 Procrastinate，或自己寫的 Postgres 佇列）時，只需要改 kernel。
+- PgQueuer 鎖定版本；升級時檢查它的資料表結構是否變更（見下方 migration）。
+
+**誰排入工作**：和 MQ 訊息相同的做法（第 8.2 節），由 adapter 的 event handler 依 domain event 決定要排入哪些工作；core 不知道背景工作的存在。event handler 在步驟 4 分派時仍然在同一個 transaction 中，所以排入工作和業務資料一起 commit、一起 rollback。
+
+**同一個 transaction**：`TaskQueue` 的 PgQueuer 實作從 `SessionProvider` 目前的 SQLAlchemy `AsyncSession` 取得底層的 asyncpg 連線（`get_raw_connection()` 的 `driver_connection`），交給 PgQueuer 的 asyncpg driver 執行 enqueue。（Phase 1 實測；如果無法在同一個連線上執行，就改用自己寫的 Postgres 佇列實作同一個介面，不退回 commit 之後才排入的做法。）
+
+**工作的內容**：
+
+- payload 用第 7.4 節的序列化工具轉成 JSON，外層帶 `organizationId`（取自觸發的事件，和 MQ 訊息相同的規則）、`taskVersion`。
+- W3C trace context 放在 PgQueuer 的 headers 中，worker 接續同一個 trace。
+- 同一件事不應重複排入時，用 `dedupe_key`。
+
+**worker**：獨立的進入點 `app/task_worker.py`（第 6.3 節），和 API、MQ consumer 分開部署和擴展。kernel 的 task wrapper（`fast_ddd_port`）包裝每個 handler，角色和 MQ 的 subscriber wrapper 相同：
+
+- 建立 unit of work（新的 `SessionProvider`；organization context 取自 payload；使用者為 worker 的系統身分；trace context 取自 headers）；
+- handler 透過 controller 呼叫 use case（第 8.2 節），handler 只寫業務邏輯；
+- 錯誤處理依 `ErrorKind`（和第 11 節 MQ 的規則一致）：先 rollback；確定性的 `DomainError` 標記為失敗、不重試；`concurrency.lock_conflict` 和其他例外以指數退避重試，超過次數（預設 3 次）後標記為失敗；
+- 失敗的工作保留，不刪除（PgQueuer 的 `on_failure` 預設是 `"delete"`，kernel 一律改成 `"hold"`），供人工檢查和重新排入；
+- 工作可能被執行不只一次（worker 中斷後，heartbeat 逾時的工作會被重新認領），handler 必須是冪等的。
+
+**排程**：定期執行的工作用 PgQueuer 的 cron 排程（`schedule()`），在 worker 中執行，不需要另外的排程 process；多個 worker 實例也不會重複觸發（Phase 1 實測）。排程工作的 unit of work 沒有組織 context（第 10.2 節）。
+
+**使用者看得到的工作狀態**：PgQueuer 的資料表是佇列內部用的，不直接對外。需要讓前端查詢進度的工作（例如匯出），由 domain 自己的 aggregate 記錄狀態（例如 `ExportJob` 的 `pending`／`running`／`done`／`failed`），和排入工作在同一個 transaction 中建立。
+
+**migration**：PgQueuer 的資料表放進 kernel 的 Alembic branch（第 7.2 節），由 kernel 隨版本提供，不使用 PgQueuer 自己的安裝和升級指令直接改資料庫，所有 schema 變更都經過 Alembic。
+
+**observability**：worker 的 metrics 和 MQ consumer 相同（第 12.2 節）：排入數、處理數、耗時、重試數、失敗數，依工作名稱區分。health check 檢查 DB 連線和 worker 的執行迴圈。
+
+**測試**：單元測試用 PgQueuer 的 in-memory adapter；整合測試用 testcontainers 的 PostgreSQL，涵蓋同一個 transaction 中 rollback 時工作不會被排入、重試和失敗、重複執行的冪等性、cron 不重複觸發。
+
 ## 12. 可觀測性與執行環境
 
 ### 12.1 Tracing
@@ -758,28 +808,56 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 - `DomainEvent` 的 `trace_id` 沿用 OpenTelemetry 目前的 trace id（W3C 格式），domain_event 表上記錄的 trace id 可以直接在 tracing 系統中查到。
 - 原版的 `span_id`／`parent_span_id` 實際上是在串連事件之間的因果關係，改名為 `event_id`／`parent_event_id`，避免和 OpenTelemetry 的 span 混淆。
 - **傳遞方式改用 ContextVar**：原版 `UseCaseBase` 把 `_trace_id`、`_parent_event` 存成 instance 屬性，而 controller 是 module 層級的單一實例，並行請求會互相覆蓋；`_save_tracing` 處理完第一個 aggregate 就清掉 parent，批次中只有第一筆帶到 parent。改為：
-  - `fast_ddd.context` 提供目前的 trace id 和 parent event id 兩個 ContextVar。trace id 由第 12.4 節的 middleware 從 OpenTelemetry 取得後設定，core 不 import OpenTelemetry。
+  - `fast_ddd.context` 提供目前的 trace id 和 parent event id 兩個 ContextVar。trace id 由第 12.6 節的 middleware 從 OpenTelemetry 取得後設定，core 不 import OpenTelemetry。
   - `EventBus` 分派事件給 handler 時，把 parent event id 設為該事件的 `event_id`、organization context 設為事件的 `organization_id`（第 10.2 節），handler 結束後還原。
   - 新事件建立時，從 ContextVar 讀取 trace id 和 parent event id。同一個 handler 中產生的所有事件（包括批次中的每一筆）都帶到同一個 parent。
   - `UseCaseBase` 不再有可變狀態，controller 和 use case 可以安全地作為單一實例共用。
 - `X-Trace-Id` response header 回傳同一個 trace id（第 9.4 節）。
 - MQ 訊息透過 message header 傳遞 W3C trace context，consumer 接續同一個 trace。FastStream 的 OpenTelemetry 整合方式在 Phase 1 確認。
 
-### 12.2 Log
+### 12.2 Metrics
+
+kernel 用 OpenTelemetry metrics 提供以下指標，服務不需要自己加：
+
+| 範圍 | 指標 |
+|---|---|
+| HTTP | 請求數、耗時（依 route、method、status code） |
+| DB | 連線池的使用中／閒置／等待數、查詢耗時 |
+| MQ consumer | 處理的訊息數、耗時（依 subscriber、結果：成功／ack 略過／重新排隊／DLQ） |
+| MQ publisher | 發送數、發送失敗數 |
+| 背景工作 | 排入數、處理數、耗時、重試數、失敗數（依工作名稱） |
+| 對外 HTTP | 呼叫數、耗時、失敗數（依目標服務） |
+
+匯出方式（OTLP 或 Prometheus exporter）由設定決定。
+
+### 12.3 Log
 
 - 結構化（JSON）log，每筆都帶 `trace_id`，以及有的話 `organization_id`、`user_id`。
 - 不記錄 token、密碼等敏感資料；500 錯誤的例外內容只寫進 log，不回傳給 client。
 
-### 12.3 設定、health 與執行方式
+### 12.4 設定、health 與執行方式
 
 - **設定**：pydantic-settings 從環境變數讀取（取代原版的 `config.py`）。kernel 提供 `KernelSettings`，服務的 `app/settings.py` 繼承它並加上自己的欄位，由 `app/bootstrap.py` 組裝時使用；core 不讀設定（第 6.3 節）。
 - **health**：
   - API：`GET /health/live`（process 存活即回 200）；`GET /health/ready` 只檢查 DB 連線，失敗回 503。不檢查 broker：RabbitMQ 短暫斷線時，寫入資料庫仍然會成功（第 11 節已接受訊息可能遺失），不該讓所有 API pod 被判定為未就緒。
   - MQ consumer：由 consumer process 自己的 health check 檢查 broker 連線。
+  - 背景工作 worker：檢查 DB 連線和 worker 的執行迴圈。
 - **API server**：uvicorn 單一 process，每個容器一個 process，由平台橫向擴展；不使用原版的 gunicorn + uvicorn worker。
 - **MQ consumer**：`faststream run`，獨立 process。
+- **背景工作 worker**：`app/task_worker.py`，獨立 process（第 11.1 節）。
+- **graceful shutdown**：收到終止訊號後，consumer 停止接收新訊息，在時限內處理完手上的訊息（未處理完的不 ack，交給 broker 重送）；API 停止接收新請求，等進行中的請求結束。這兩個時限都必須小於平台給的終止寬限時間（例如 Kubernetes 的 `terminationGracePeriodSeconds`），否則 process 會在處理到一半時被強制終止。
 
-### 12.4 每個請求、每則訊息的 context
+### 12.5 對外 HTTP client
+
+`wire_resources` 建立的對外 HTTP client（第 6.3 節）一律由 kernel 的工廠建立，統一以下行為：
+
+- 每個目標服務一個共用的 client（連線池），在關閉時釋放；
+- 必須明確設定 timeout，沒有預設的無限等待；
+- 只在連線層錯誤（連線失敗、逾時）時重試，而且只重試冪等的 method（GET、PUT、DELETE）；收到 HTTP 回應後不重試；
+- 自動傳遞 W3C trace context；
+- 記錄每次呼叫的 log 和 metrics（第 12.2 節），記錄前遮蔽個人資料和金鑰（例如 `Authorization` header、token、密碼欄位）。
+
+### 12.6 每個請求、每則訊息的 context
 
 原版在 import 時就建立全域預設的 `SessionProvider` 和 publisher（`app/adapter/repository/base.py`、`app/package_instance.py`），HTTP middleware 再逐請求覆蓋（`app/middleware.py`）。新版不在 import 時建立任何預設值，ContextVar 沒有設定時直接報錯。
 
@@ -803,9 +881,16 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 
 ## 13. 型別、測試與品質檢查
 
-- pyright strict；排除 `alembic/versions`。kernel 附 `py.typed`。
-- ruff（含 `DTZ`、`TID251`）、import-linter（第 6.2 節）、pytest。
-- 在 CI 和 skill 中統一成一個 `make check`：skill 的完成條件就是 `make check` 全部通過。
+- pyright strict；排除 `alembic/versions`。kernel 附 `py.typed`。不允許用 `# type: ignore` 繞過檢查：`enableTypeIgnoreComments: false`、`reportUnnecessaryTypeIgnoreComment: error`。
+- ruff（format 和 lint，lint 含 `DTZ`、`TID251`）、import-linter 和 contract 涵蓋檢查（第 6.2 節）、pytest。
+- pytest：`filterwarnings = error`，warning 一律視為錯誤，第三方套件的 warning 以範圍明確的例外排除；需要外部工具的測試在 CI 中不可以被略過（缺少工具時失敗，而不是 skip）。
+- coverage：template 預設 `fail_under = 80`，各服務可以調高，不可以調低。
+- 測試資料庫一律以 Alembic migration 建立（不用 `metadata.create_all`），migration 本身也會被測到；測試之間以 rollback 或 truncate 隔離。
+- **migration 的檢查**：CI 確認 Alembic 只有一個 head（kernel 的 branch 和服務的 branch 各一個，第 7.2 節），並執行 `alembic check`，確認 ORM model 沒有尚未產生的 migration。`env.py` 開啟 `compare_type` 和 `compare_server_default`；migration 檔名加上日期前綴（`file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s`），依檔名就能看出順序。
+- **pre-commit**：template 提供 `.pre-commit-config.yaml`，安裝 `pre-commit` 和 `commit-msg` 兩種 hook：
+  - commit 前：ruff format、ruff lint、pyright、import-linter 和 contract 涵蓋檢查、`uv lock --check`、trailing whitespace、檔案結尾換行、大型檔案檢查；
+  - commit message：Conventional Commits 格式（`conventional-pre-commit`）。
+- 在 CI 和 skill 中統一成一個 `make check`（包含上述所有檢查和測試）：skill 的完成條件就是 `make check` 全部通過。pre-commit 只是提早發現問題，CI 的 `make check` 才是最終關卡。
 - **每個 aggregate 至少要有的測試**（skill 產生程式碼時一併產生；沒有測試時 `make check` 一樣會過，所以必須明確規定）：
 
 | 類別 | 內容 |
@@ -814,6 +899,7 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 | repository 整合測試（testcontainers PostgreSQL） | mapping 往返一致（包括子集合）；只修改子 entity 時 `version` 仍然遞增；tenant 過濾（其他組織的資料讀不到）；`load_many` 的鎖定順序；`version` 和 `updated_at` 的更新與寫回 |
 | API 測試 | 第 9.5 節表中適用的每個 status code 和錯誤代碼；BOLA（存取其他組織的資料回 404）；ETag（缺少回 428、不符回 412、格式不接受回 400、404 優先於 412）；Content-Type 不是 JSON 時回 415；PATCH 的 `null` 和巢狀 value object 語意；有批次操作時，207 的逐筆結果 |
 | MQ consumer 測試（有 subscriber 時） | payload 驗證失敗和缺少 `organizationId` 時送進 DLQ；未知欄位被忽略；重複的 `eventId` 只處理一次；handler 寫入資料後丟出 `DomainError` 時，寫入和 inbox 都被 rollback |
+| 背景工作測試（有 task handler 時） | 排入工作的 transaction rollback 時工作不會被排入；確定性錯誤不重試、暫時性錯誤重試後標記失敗；同一個工作執行兩次的結果相同 |
 | 錯誤代碼目錄 | 第 9.6 節的格式、唯一性、訊息範本與 params 一致 |
 
 ## 14. Skill 設計
@@ -826,7 +912,7 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
 |---|---|---|
 | 預設產生（每個 aggregate 都有） | list、get、create、PATCH、delete | 對應 DRF 的 `ModelViewSet`，不提供 PUT |
 | 參考服務（每種寫法示範一次） | 加上一個 domain 指令（void）、一個批次操作（batch-void）、event handler、MQ consumer | skill 需要範本的寫法才放進來 |
-| recipe（使用者要求時才加） | export、其他批次操作、archive 快照、operation history、批次 event handler | 寫在 `skills/fast-ddd/references/recipes/`，有需要才照著加 |
+| recipe（使用者要求時才加） | export、其他批次操作、archive 快照、operation history、批次 event handler、即時推播（第 14.3 節） | 寫在 `skills/fast-ddd/references/recipes/`，有需要才照著加 |
 
 - **void 留在參考服務**：它示範了 CRUD 示範不到的 domain 指令寫法。domain 方法先檢查不變條件（已經作廢就丟出 `YourAggregateAlreadyVoided`，對應 409），再改變狀態、發出 `YourAggregateVoided` 事件。沒有這個範例，AI 新增業務操作時容易把狀態轉換寫成 PATCH 一個 `status` 欄位，等於把 domain 規則搬到 client 端。
 - **業務狀態跟著 domain 指令一起出現**：DDD 沒有規定一組基本狀態。預設產生的 aggregate 只有第 7.5 節的技術欄位，沒有 `status` enum；原版的 `CREATED` 只代表「資料存在」，沒有業務意義。當使用者要求的第一個 domain 指令需要狀態轉換時，才一起加入 `status` enum、狀態轉換的檢查、對應的錯誤代碼和事件。參考服務的 void 示範了這個完整過程（`active` → `voided`）。
@@ -845,13 +931,28 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
 - **`fast-ddd-init`**（設 `disable-model-invocation: true`）：執行 copier 建立服務骨架。
 - frontmatter 只用開放標準的欄位，只有 `fast-ddd-init` 例外。
 
+### 14.3 即時推播 recipe 的設計規則
+
+需要把變更即時推給前端時才加入。recipe 必須遵守以下規則：
+
+- **技術**：Socket.IO（python-socketio），以 ASGI app 掛在 API 同一個 FastAPI app 的固定路徑下（例如 `/realtime`），不另開 process。多個 API 實例之間的推播分送使用 python-socketio 的 RabbitMQ manager（`AsyncAioPikaManager`），沿用既有的 RabbitMQ，不另外引入 Redis。
+- **分層**：socket 的事件 handler 屬於 port 層（和 HTTP router 同層），一樣透過 controller 呼叫 use case。推播由 adapter 層的 publisher 發出，core 不知道推播的存在；要推播什麼，由 adapter 的 event handler 依 domain event 決定（和 MQ 訊息相同的做法，第 8.2 節）。
+- **commit 之後才推播**：推播一律註冊為 `SessionProvider` 的 after-commit hook（第 8.2 節），rollback 時不會送出。
+- **認證**：連線時必須驗證 JWT（和 HTTP 使用同一套驗證，第 10.3 節），沒有 token 或驗證失敗一律拒絕連線，不建立連線後再送錯誤事件。
+- **tenant**：組織和使用者一律取自 token，不接受 client 在 query string 或事件內容中自行指定。
+- **room**：`org:{organization_id}`、`user:{user_id}`，以及依資源而定的 room（例如 `your_aggregate:{id}`）。連線時自動加入自己的 org 和 user room；加入資源 room 前，必須先檢查權限（和 HTTP 相同的 `require()` 規則）。依使用者的 room 推播，重新連線後不需要重新訂閱也能收到。
+- **不允許沒有對象的推播**：kernel 的 publisher 拒絕沒有指定 room 的推播，避免誤推給所有連線。
+- **訊息格式**：推播內容和 HTTP 回應使用相同的 `ResponseModel`（camelCase、RFC 3339），並帶 `eventName` 和 `eventVersion`；需要回應的事件，ack 使用固定格式 `{"status": "ok" | "error", "data": …, "error": <problem+json>}`。
+- **部署**：只允許 WebSocket transport（不使用 long-polling 備援），多實例時不需要 sticky session。
+- **測試**：用真正的 Socket.IO client 連線測試認證拒絕、room 權限、commit 前不推播、rollback 不推播。
+
 ## 15. 實作階段
 
 | 階段 | 內容 | 驗收條件 |
 |---|---|---|
-| Phase 1：kernel + 參考服務 | 依第 6.1 節建立 kernel 的三個套件：搬移 `ddd_base`、repository／controller base（含修正後的 `SessionProvider` 和 `savepoint()`）；新增 `fast_ddd.context`、`RequestModel`／`ResponseModel`／`MessageModel`、`Timestamp`、`DecimalStr`、`TypeDecorator`、事件序列化工具、`BatchResult` 和批次 runner、IntegrityError 和鎖定錯誤的轉換、`DomainError` 和錯誤代碼處理、錯誤代碼目錄、SQL 語句計數器、JWT 驗證、tenant 隔離、權限 dependency、CORS、health、HTTP 的 unit-of-work middleware、tracing 整合、MQ 的 subscriber wrapper（ack／DLQ 設定和 inbox）、選擇性開啟的 archive、domain_event 的新欄位。`example/` 手寫一個完整的 bounded context（預設 CRUD、void、batch-void、event handler、MQ consumer），以及 `app/settings.py`、`app/bootstrap.py`、`app/wiring.py`、`app/main.py`、`app/consumer.py` | `make check` 全部通過，包含 kernel 和 `example/` 的 import-linter contract；第 7.1 節的 contract test；第 8.3 節的往返次數、fallback、巢狀呼叫、`populate_existing`、`SessionProvider` 測試（使用 kernel 的測試用 aggregate）；500 回應帶有 CORS header 和 `X-Trace-Id` 的測試；第 9.3 節的路由測試；第 13 節規定的測試；kernel 的 archive 測試（預設不寫入快照，設定 `archive_model_class` 後才寫入）；並行測試（兩個請求同時執行時，事件的 trace id 和 parent event 不互相干擾）；CORS preflight 測試（POST、PATCH、DELETE） |
-| Phase 2：copier template | 從 `example/` 抽出骨架，檔案分成兩種歸屬。**template 擁有**（服務不修改，recopy 比對的對象）：Dockerfile、alembic 的 `env.py`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、Makefile、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`.claude/settings.json`；工具設定放在獨立檔案、不放在 `pyproject.toml`，template 才能單獨擁有它們。**服務擁有**（只在第一次產生時建立，copier 的 `_skip_if_exists`，之後由服務維護，recopy 時不覆蓋）：`pyproject.toml`（服務自己的相依，例如 export recipe 加入的 openpyxl）、`app/settings.py`、`app/wiring.py`。（Phase 2 實測 `_skip_if_exists` 在 `recopy --overwrite` 下的行為） | 用 `copier copy --vcs-ref HEAD`（`kernel_source=path`，測試 repo 內的 kernel）產生的空服務能通過 `make check`；`copier update` 能套用 template 的更新；CI 對 `example/` 執行 `copier recopy --overwrite --defaults --vcs-ref HEAD` 後，骨架檔案沒有差異 |
-| Phase 3：skill + marketplace | 撰寫 `fast-ddd` 和 `fast-ddd-init`、recipe（export、其他批次操作、archive 快照、operation history、批次 event handler，和第 14.1 節的清單相同）、`marketplace.json`、`plugin.json` | `claude plugin validate` 通過；從本機 marketplace 載入後，在一個新服務中由 skill 產生一個新的 bounded context，產出能通過 `make check` |
+| Phase 1：kernel + 參考服務 | 依第 6.1 節建立 kernel 的三個套件：搬移 `ddd_base`、repository／controller base（含修正後的 `SessionProvider` 和 `savepoint()`）；新增 `fast_ddd.context`、`RequestModel`／`ResponseModel`／`MessageModel`、`Timestamp`、`DecimalStr`、`TypeDecorator`、事件序列化工具、`BatchResult` 和批次 runner、IntegrityError 和鎖定錯誤的轉換、`DomainError` 和錯誤代碼處理、錯誤代碼目錄、SQL 語句計數器、JWT 驗證、tenant 隔離、權限 dependency、CORS、health、HTTP 的 unit-of-work middleware、tracing 整合、MQ 的 subscriber wrapper（ack／DLQ 設定和 inbox）、`TaskQueue` 介面、PgQueuer 實作和 task wrapper、選擇性開啟的 archive、domain_event 的新欄位。`example/` 手寫一個完整的 bounded context（預設 CRUD、void、batch-void、event handler、MQ consumer），以及 `app/settings.py`、`app/bootstrap.py`、`app/wiring.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`；參考 bounded context 加入一個由 event handler 排入的背景工作和一個 cron 排程 | `make check` 全部通過，包含 kernel 和 `example/` 的 import-linter contract；第 7.1 節的 contract test；第 8.3 節的往返次數、fallback、巢狀呼叫、`populate_existing`、`SessionProvider` 測試（使用 kernel 的測試用 aggregate）；500 回應帶有 CORS header 和 `X-Trace-Id` 的測試；第 9.3 節的路由測試；第 13 節規定的測試；kernel 的 archive 測試（預設不寫入快照，設定 `archive_model_class` 後才寫入）；並行測試（兩個請求同時執行時，事件的 trace id 和 parent event 不互相干擾）；CORS preflight 測試（POST、PATCH、DELETE）；第 11.1 節的背景工作測試，以及「透過 SQLAlchemy 的 asyncpg 連線在同一個 transaction 中排入工作」的實測 |
+| Phase 2：copier template | 從 `example/` 抽出骨架，檔案分成兩種歸屬。**template 擁有**（服務不修改，recopy 比對的對象）：Dockerfile、alembic 的 `env.py`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、`.pre-commit-config.yaml`、Makefile、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`、`.claude/settings.json`（含第 3 節的 deny 清單）；工具設定放在獨立檔案、不放在 `pyproject.toml`，template 才能單獨擁有它們。**服務擁有**（只在第一次產生時建立，copier 的 `_skip_if_exists`，之後由服務維護，recopy 時不覆蓋）：`pyproject.toml`（服務自己的相依，例如 export recipe 加入的 openpyxl）、`app/settings.py`、`app/wiring.py`。（Phase 2 實測 `_skip_if_exists` 在 `recopy --overwrite` 下的行為） | 用 `copier copy --vcs-ref HEAD`（`kernel_source=path`，測試 repo 內的 kernel）產生的空服務能通過 `make check`；`copier update` 能套用 template 的更新；CI 對 `example/` 執行 `copier recopy --overwrite --defaults --vcs-ref HEAD` 後，骨架檔案沒有差異 |
+| Phase 3：skill + marketplace | 撰寫 `fast-ddd` 和 `fast-ddd-init`、recipe（export、其他批次操作、archive 快照、operation history、批次 event handler、即時推播，和第 14.1 節的清單相同）、`marketplace.json`、`plugin.json` | `claude plugin validate` 通過；從本機 marketplace 載入後，在一個新服務中由 skill 產生一個新的 bounded context，產出能通過 `make check` |
 
 ## 16. 待決事項
 
@@ -859,7 +960,7 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
 
 ## 17. v1 不做的事
 
-- 架構：transactional outbox 和 relay、DI container、domain_event 的 partition、批次 event handler（改為 recipe）、HTTP 和 MQ 以外的進入點（系統排程、CLI）。
+- 架構：transactional outbox 和 relay、DI container、domain_event 的 partition、批次 event handler（改為 recipe）、HTTP、MQ、背景工作以外的進入點（例如 CLI）。
 - 錯誤代碼：在 OpenAPI 中逐一列出每個 endpoint 可能的錯誤代碼 enum、enum 驗證錯誤的可用值清單（`params.allowed`）。
 - 發布：copier 的 broker 選項、kernel 發布到 PyPI、skill evals、`openapi.json` 快照。
 - API：cursor 分頁、sparse fieldsets、通用 filter 語言、`POST .../search`、HTTP QUERY method（RFC 10008，框架和 proxy 的支援情況未驗證）、`Idempotency-Key` header、RateLimit headers（IETF draft 仍在進行中）、非同步匯出 job、後端在地化錯誤訊息（`Accept-Language`）、cookie 認證。

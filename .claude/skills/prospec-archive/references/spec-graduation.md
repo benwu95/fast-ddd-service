@@ -1,0 +1,55 @@
+# Feature Spec Graduation Reference
+
+`prospec-archive` alone writes Feature Specs: the CLI performs mechanical sync; Phase 3.5 judges semantic completeness.
+
+---
+
+## The Five CLI Worklists
+
+### 1. Graduation Worklist (`pendingConvergence`)
+- **Meaning**: Authored bodies kept without a landing block, bare titles, or duplicate/stale active sections needing judgment.
+- **Action**: Read each reported reason and converge against the final code.
+
+### 2. Dropped Behavior (`droppedBehavior`, BLOCKING)
+- **Meaning**: A proposed replacement omits undeclared `WHEN/THEN` bullets.
+- **Action**: Restore them into `**Spec:**` or declare them under `**Dropped:**`; the CLI holds the write until resolved.
+
+### 3. Refused Requirements (`refusedRequirements`, BLOCKING)
+- **Meaning**: REQs the CLI cannot safely land. Archive preflight reports these before the change is moved; resolve the named cause and retry archive (dry-run reports the same refusal).
+- **Action**: Follow the reported kind; no declaration bypasses a refusal:
+  - `unclosed-fence`: close the fence in the named source file (the feature mother file or a registered slice). The whole feature is left unwritten; do not rewrite the delta-spec to work around it.
+  - `unresolved-feature`: correct the `**Feature:**` routing header to the feature that hosts the REQ id.
+  - `truncation`: fix the named block (`**Spec:**` for MODIFIED, `**Description:**`/`**Acceptance Criteria:**` for ADDED); inline labeled sections as bullet lists.
+
+### 4. Acknowledged Drops (`acknowledgedDrops`)
+- **Meaning**: Declared omissions, including rewrites.
+- **Action**: Check the merged file for unintended loss.
+
+### 5. Stale Declarations (`staleDeclarations`)
+- **Meaning**: Declared bullets that were not dropped.
+- **Action**: Re-read the merged file before graduating.
+
+---
+
+## Graduation Key by Scale
+
+- **`standard` / `full`**: Graduate all REQ IDs defined in `delta-spec.md`.
+- **`backfill`**: Graduate all REQ IDs defined in `delta-spec.md` (feature-slug REQ IDs route by `**Feature:**`).
+- **`quick`**: Apply spec changes manually from proposal's **Spec Impact** section (no `delta-spec.md` exists by contract). If no spec impact was diagnosed, skip graduation entirely.
+
+---
+
+## Block-Replaces-Whole-Body Rule
+
+A `**Spec:**` landing block in `delta-spec.md` replaces the **entire active requirement body** selected for merging in `specs/features/`.
+- Any existing behavior not restated in the new block is considered removed.
+- With only a struck definition, archive preserves that history byte-identical and inserts a new active section. `req-id-uniqueness` reports the duplicate for human resolution.
+- Always review the merged spec on disk via `prospec spec show <feature> --req <ids>`.
+
+---
+
+## Semantic Convergence Guidelines
+
+1. **Voice & Language**: Write in Traditional Chinese (Taiwan) (the Feature Specs' language), behavior-first voice (`- WHEN ..., THEN ...`). Strip transient change narrative.
+2. **Story Placement**: Ensure newly inserted REQs are placed under the appropriate `## US-{N}` section. The mechanical insertion uses the first real, unfenced `## Edge Cases`, `## Deprecated Requirements` or `## Change History` heading, or EOF when none exists; check Story context after insertion.
+3. **Context Enrichment**: Ensure User Story context (`As a ... / I want ... / So that ...`) is present.

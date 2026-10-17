@@ -1,0 +1,137 @@
+# Drift Report (prospec-report.json) Format Reference
+
+`DriftReportSchema` owns the report shape; `structural.knowledge_health` is a frozen contract.
+
+## How the report is produced
+
+`prospec check --json` **writes** `prospec-report.json` in the project root; stdout is a human-readable summary, **not JSON**. Read the file. Regenerate after edits; never fabricate reports.
+
+## Top-level shape
+
+```jsonc
+{
+  "version": 1,
+  "generated_at": "<ISO timestamp>",
+  "change_digest": "<repository-input fingerprint, or null when unprovable>",
+  "snapshot": { "fingerprint_version": "snapshot-v2", "scope": "repository-inputs-v2" },
+  "structural": { "checks": [ … ], "findings": [ … ], "knowledge_health": { … }, "constitution": { … } },
+  "semantic":   { "status": "not-checked", "note": "…" },
+  "summary":    { "fail_count": 0, "warn_count": 0, "skipped_count": 0 }
+}
+```
+
+This display artifact preserves legacy readability. Snapshot trace adds version/scope/head/reason. Verify/archive recheck live inputs; status ignores timestamps/Git trace.
+
+## `test_evidence` — optional certified reuse diagnostics
+
+`test_evidence[changeName]` carries the certified original run:
+
+```json
+{"attempt_id": "run-1", "date": "2026-07-28", "command": "node --test", "exit_code": 0, "test_policy": {"version": 1, "excluded_path": "prospec/ai-knowledge"}, "reason": "Compatible effective inputs; Knowledge excluded by policy"}
+```
+
+Require the target in `test-provenance`'s `subjects` too. Missing/skipped/exempt/unenumerated evidence never certifies reuse. The reason certifies input compatibility, not Knowledge-only differences; metadata stays unchanged.
+
+`change_digest`/`snapshot` still include Knowledge; check IDs and `structural.knowledge_health` are unchanged.
+
+## `structural.checks[]` — one entry per check, keyed by `id`
+
+A **flat array** keyed by `id`, never by position. Each entry: `{ id, status, reason?, subjects?,
+subject_skips? }`, adopted **verbatim**.
+
+- `status` ∈ `pass` | `warn` | `fail` | `skipped`. A `skipped` check carries a `reason` and is
+  **never** treated as `pass` — skipped means unchecked.
+- `subjects` (change-scoped checks only): the change names the collector enumerated. A per-change
+  gate reads a target's absence here as unprovable, never as pass; a name under `subject_skips`
+  (with its reason) reads as skipped for that change even when the check as a whole FAILs.
+- `id` ∈ the frozen `DRIFT_CHECK_IDS` set: `req-references`, `file-paths`, `import-direction`,
+  `knowledge-health`, `task-completion`, `dangling-prefix`, `feature-modules`,
+  `mcp-readme-counts`, `review-provenance`, `metadata-completeness`, `knowledge-size`,
+  `test-provenance`, `constitution-severity`, `artifact-language`, `spec-counters`,
+  `delta-spec-provenance`, `unjustified-budget-override`, `canonical-doc-drift`,
+  `delta-spec-landing-fidelity`, `req-id-uniqueness`, `language-policy-drift`,
+  `skill-reference-map`.
+
+### Key Check Interpretations
+
+| Check ID | Default Severity | Purpose & Interpretation | Skip Condition |
+|----------|------------------|--------------------------|----------------|
+| `artifact-language` | `warn` | Flags change artifacts whose prose contains no characters in the configured artifact language. | Latin-script languages, unreadable file, scan error. |
+| `delta-spec-provenance` | `fail` | Flags changes whose `delta-spec.md` diverged from the review baseline fingerprint. | `scale: quick`, proven backfill (`backfill-draft.md` present). |
+| `spec-counters` | `warn` | Flags feature specs whose frontmatter `story_count`/`req_count` disagrees with actual headings. | Specs absent or unparseable. |
+| `unjustified-budget-override` | `fail` | Flags unjustified `token_budget` overrides and shipped budget keys that bind nothing. | No budget override configured. |
+| `canonical-doc-drift` | `warn` | Flags canonical project docs drifting from rendered canonical templates. | File absent. |
+| `delta-spec-landing-fidelity` | `fail` | Flags MODIFIED `**Spec:**` blocks omitting existing `WHEN/THEN` bullets without `**Dropped:**` declaration. | ADDED entries, no `**Spec:**` block, no changes dir. |
+| `req-id-uniqueness` | `fail` | Flags duplicate REQ ID definitions across Feature Specs (slices grouped with parent). | Specs absent or unparseable. |
+| `language-policy-drift` | `warn` | Flags a Constitution whose Language Policy Description no longer matches the one generated for the resolved language scope, or still carries the old seed (the old English seed in an English-only project passes — nothing to migrate). | Constitution unreadable, no Language Policy principle, or no `**Description**:` field. |
+| `task-completion` | `warn`/`fail` | Tracks code-task completion in `tasks.md` (`[M]`/`[V]` excluded). | No tasks.md or not in git repo. |
+| `constitution-severity` | `warn` | Checks Constitution principles for RFC-2119 severity tags (`MUST`/`SHOULD`/`MAY`). | Constitution missing or empty. |
+| `knowledge-health` | `warn`/`fail` | Reports freshness and coverage; see `structural.knowledge_health` below. | Module map unavailable. |
+| `test-provenance` | `fail` | Validates test execution record, freshness, and exit code. | No test command configured (skips honestly). |
+
+**Verdicts are definitive**: `prospec-verify` machine dimensions adopt check results verbatim; `skipped` maps to `not-adjudicated`, never `pass`.
+
+## `structural.findings[]` — problems only
+
+`{ check, severity, source_path, line?, detail, knowledge_size? }`. Findings exist **only** for
+`warn`/`fail` outcomes (`pass`/`skipped` produce none). `severity` ∈ `warn` | `fail`. For
+`check: 'task-completion'`, each finding carries the `source_path` + `line` of one unchecked code
+task — use these, don't recount tasks.md. For `check: 'knowledge-size'`, each finding also carries an
+optional `knowledge_size` object — `{ surface, budget_key, budget, actual, unit, tier, remedy? }`, the
+structured facts behind its `detail` (additive, so a report without it still validates); `unit` ∈
+`tokens` | `lines`, `tier` ∈ `over` | `headroom`, `remedy` absent for `headroom`.
+
+## `structural.knowledge_health` (optional) — module freshness + coverage
+
+```jsonc
+{
+  "modules": [
+    { "name": "lib", "last_src_commit": "<ISO|null>", "last_readme_commit": "<ISO|null>", "last_sub_module_commit": "<ISO>", "stale": true, "last_verified": "<ISO>" }
+  ],
+  "coverage": { "documented": 23, "total": 23 }
+}
+```
+
+- Per-module staleness lives on **each element of `modules[]`** as the boolean `stale`.
+  `knowledge_health` has **no** top-level `stale[]` array — to get the stale modules, filter
+  `knowledge_health.modules` by `.stale`: `knowledge_health.modules.filter(m => m.stale)`.
+- `last_verified` is the module's explicit confirmation time (`module-map.yaml`, stamped by
+  `prospec knowledge verify`), **absent** when none is declared. It is the freshness reference: for a
+  **documented** module `stale` recomputes as `last_src_commit` vs `last_verified` **by UTC calendar
+  day** (or stale when `last_verified` absent — a same-day commit reads fresh). A module with no
+  README is stale by the coverage rule — that verdict rides its `coverage gap` finding, not these timestamps.
+- `last_readme_commit` / `last_sub_module_commit` remain in the frozen shape (the latter **absent**
+  when no sub-module, never null-filled) but no longer drive `stale` — reported for downstream continuity.
+- `coverage` is `{ documented, total }` module README counts.
+- The whole object is **optional** (absent when the module map is unavailable) → treat as "no freshness facts", not all-fresh.
+
+## `structural.constitution` (optional) — the rule inventory verify audits against
+
+```jsonc
+{
+  "rules": [
+    { "name": "Language Policy", "severity": "MUST", "has_verify_hint": true, "line": 10, "check_id": "language-policy-drift", "coverage": "Description matches generated text", "stations": "all" },
+    { "name": "Legacy untagged rule", "severity": null, "has_verify_hint": false, "line": 42 }
+  ]
+}
+```
+
+- One entry per `###` heading in the Constitution's `## Principles` section, in file order.
+- Each entry carries `name`, `severity`, `has_verify_hint`, `line`, plus optional `check_id` and `coverage` when declared in a `**Verify**:` line (`check: <id>[; covers: <scope>]`).
+- `stations` comes from the `stations: <s1>, <s2> | all` clause (a reserved word on that line; any order): `"all"`, the lower-cased `SDD_STATIONS` names, or `null` = undeclared. A list containing `all` means every station; `constitution-severity` warns on an unknown name, `all` mixed with names, or an empty list.
+- `severity` ∈ `MUST` | `SHOULD` | `MAY` | `null`. `null` = no RFC-2119 tag — **never** defaulted;
+  `constitution-severity` warns on it.
+- When the inventory has rules but **no project-authored** principle (only the seeded examples +
+  Language Policy remain after subtracting the starter set), `constitution-severity` warns with one
+  whole-document finding (no `line`): nothing real to grade.
+- `prospec-verify` 3/5 audits against this list: a statement for each rule with no `check:`, a `covers:` gap, or a not-adjudicated check, taking each
+  severity from here and filling machine verdicts from declared `check_id`s, not re-reading the file — so no rule is skipped or reassigned. Judging a
+  violation stays with the agent.
+- The whole object is **optional** (absent when the Constitution is missing or declares no
+  principles) → audit from the file and record the missing-inventory WARN.
+
+## `semantic` and `summary`
+
+- `semantic.status` is **always** `not-checked` — semantic consistency is `prospec-review`'s
+  job and must never be presented as `pass` from this report.
+- `summary` carries `fail_count` / `warn_count` / `skipped_count` (aggregates over `checks`).

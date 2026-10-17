@@ -1,0 +1,115 @@
+# Review Format Reference
+
+Severity contract, cumulative `review.md` format and lenses for **prospec-review**.
+
+---
+
+## Severity Criteria
+
+Three severity levels only.
+
+### critical — blocks the loop, auto-fixed (when drop-in)
+
+A critical must be one of:
+
+1. **Real defect**: a bug, security hole, data loss or production incident; speculative risks are not critical.
+2. **Dependency-direction violation**: an import or call that breaks the project's declared dependency direction — from its Constitution / `_conventions.md` (never upward).
+3. **Spec contradiction**: the implementation logically contradicts a `delta-spec` REQ's stated intent.
+4. **Single-source bypass on an autonomous or write path**: the change re-implements a guard, normalizer, or writer that the project's knowledge base documents as the single source (or that an existing service already provides), AND the duplicate sits on an autonomous or write path — *autonomous*: executed without a human in the loop (a scheduled, CI, hook, or agent-driven job); *write path*: code that creates or mutates an artifact, record, or configuration — both conditions required; a duplicate off those paths stays major (DRY). This two-condition definition lives here only — the plan rubric and the lens reference cite it by name.
+
+> REQ *completeness* ("this REQ is only partially covered") is **not** a review critical — it is left to `prospec-verify` dimension 1–2. Review checks correctness and spec-*contradiction*, not coverage.
+
+### major — does not block, proposed, passed to verify as WARN
+
+- **Performance** and **maintainability** concerns. Recorded and handed to `prospec-verify` as an advisory WARN (via `quality_log`); **not counted in verify's grade** — review and verify stay on separate axes. Never auto-fixed.
+
+### minor — recorded, does not block
+
+- Style, naming, formatting, speculative risk or already-handled concerns: leave **unfiled**. Filed minors are **recorded** (the CLI drops nothing), never block, are never auto-fixed and never affect verify's grade.
+
+---
+
+## Auto-Fix Boundary
+
+A class predicate describes the failure mode's structure rather than a list of quoted instance strings.
+
+Auto-apply only a critical **confirmed to exist** by an independent verifier's `[confirmed]` verdict after running its `repro` and reading cited code, with a **fail-then-pass mutation-verified regression test (pin)** and a **concrete, local, drop-in** fix. With no mutation tool, red on unfixed code then green after fixing is the receipt. Every critical carries a `repro` and regression test. An **architectural, a large refactor, or ambiguous** fix is **escalated to the human** with analysis. Run the full suite after each fix; roll back fixes that turn tests red.
+
+---
+
+## review.md Format
+
+Persisted at `.prospec/changes/{name}/review.md`, cumulative across rounds. The table is
+**CLI-written**: emit each round's findings as JSON and run `prospec review merge --findings <file> --lenses <lens,lens,…> [--round <n>]`
+— never hand-edit the table. Canonical shape the CLI renders:
+
+```markdown
+# Review Findings: {change-name}
+
+| ID | Location | Severity | Lens | Status | Origin | Summary | Repro |
+|---|---|---|---|---|---|---|---|
+| F-1 | src/lib/foo.ts:42 | critical | spec-architecture | fixed | 1 | off-by-one in loop bound | <project test command> <pin selector> |
+| F-2 | src/services/bar.ts:88 | major | maintainability | proposed | 1 | duplicated matcher |  |
+
+<!-- prospec:evidence-section -->
+## Evidence
+
+<!-- prospec:evidence F-1 -->
+### F-1
+
+read foo.ts:38-46 — the `<=` bound overruns when n === len.
+<!-- prospec:evidence-end -->
+<!-- prospec:evidence-section-end -->
+```
+
+- **`Repro` uses the project's own test command** — the one
+  [`project-test-runner.md`](project-test-runner.md) resolves; `<project test command>` in the
+  example above is a placeholder, never literal text; `<pin selector>` stands for that runner's own
+  test-selection syntax (a name filter, a path, a marker) — the example commits to no framework's flags.
+- **Two surfaces carry the finding's evidence half.** `Repro` is a table column whose `\|` escaping round-trips; prose lives in the marker-anchored `## Evidence` section keyed by `id`. Both are cumulative: a round that re-reports a finding without them keeps what the artifact holds. A round with no evidence writes no section at all. Optional author notes go below the closing marker; artifact generation follows `prospec review merge`. [`delegated-evidence-format.md`](delegated-evidence-format.md) owns payload, `repro` forms and relayed-field ceilings.
+
+- **Origin column** records the integer round (`origin_round`) in which the finding was first detected.
+  When an existing row is carried forward or updated, its `Origin` round is preserved. In round > 1,
+  findings whose `Origin` is later than the current loop's first round quantify fix-induced defect density feeding the circuit breaker.
+- **Full-Lens Re-Review Default**: Re-review is executed as a full-lens pass over the cumulative diff
+  in a fresh minimal context (cumulative diff + lenses + pinned findings list). Pinned findings are
+  mechanically guarded by their regression tests rather than consuming judgment tokens.
+- **Summary and evidence prose follow the artifact language** assigned to `.prospec/changes/**` by the Constitution's Language Policy. Keep paths, identifiers, APIs, `Repro` commands and Severity/Lens/Status enums in English. The CLI preserves the findings JSON's language.
+- **A claim of mutation verification must name the mutations.** Its Summary names each mutation and whether it turned the test red; an unnamed set is indistinguishable from none. This governs the reviewer's output, not the change.
+- **Identity is the reviewer-supplied `id`**: reuse it for the same finding despite shifted lines; the CLI never infers identity from the Location string. An id no existing row carries **opens a new row**, the one exception is a row carrying no id at all, which it adopts. Id-less input keys by location+lens against rows that **predate this round**, each claimable once in table order, excluding rows named by another input id. **two id-less findings you file at one Location in one round stay two rows**; withholding an id loses cross-round tracking, not the row.
+- The CLI's deterministic bookkeeping: merge by identity, **origin round tracking**, **severity taken as the maximum**, rows
+  **carried forward** across rounds as the anchor (resolved items are not re-raised), prose around
+  the table preserved.
+- Round counting and circuit breaker checks run inside the CLI — the stopping
+  rules are in [`circuit-breaker.md`](circuit-breaker.md); the structured round metrics come from
+  the merge command's report (`round`, `criticals_found` / `criticals_fixed` / `majors`, `fix_induced_ratio`).
+
+- **Test-failure metrics** (CLI-owned, same comment): `test_failures` + bounded `test_failure_ids` —
+  distinct failed attempts observed by `prospec review merge` in a row (absent = zero; a replayed id
+  never counts twice; a fresh certified green clears both; exemptions and loop rollover do not). Only
+  observed attempts count. The CLI persists escalation events before rechecking and splicing metrics; failed event writes change no metrics. Follow `prospec review merge` for refusal outcomes, including any persisted exemption WARN.
+
+---
+
+## Round Activity
+
+- **Meaning**: CLI-owned `round_activity="true|false"` accompanies a valid positive safe integer `round`. A new row, a resolved→unresolved transition or a severity increase sets activity, using the same identity merge loop. Later updates in the same payload or round cannot erase it. Unchanged advisory re-reports and location/prose edits alone are inactive.
+- **Persistence**: new rounds initialize from merge activity; same-round true is sticky, false changes only on activity, and absent legacy activity stays unknown, never false by omission. A later round can establish false. Strict reads reject invalid values or missing rounds; lenient reads never convert invalid values to false.
+- **Receipt integrity**: metrics rendering, failure-only splices, receipt normalization and artifact digests preserve activity. Matching artifact-only repair and current accepted replay reuse the saved value; new same-round requests accumulate activity. An older accepted replay never replaces newer artifacts or metadata. Activity covers observed updates only; full review remains required.
+
+---
+
+## Reviewer Lenses
+
+| Lens | Classification | Looks for |
+|------|----------------|-----------|
+| Correctness & edge cases | must-run | Logic, boundaries, errors and state transitions. |
+| Security & data integrity | must-run | Injection, secrets, authorization, filesystem writes, preservation, model/tool trust and dependencies; web checks when applicable. |
+| Spec-architecture | must-run | REQ contradictions, dependencies, conventions and ripple. |
+| Efficiency / performance | conditional | Hot paths, repeated I/O, resource use or latency-sensitive changes. |
+| Maintainability / DRY | conditional | Abstractions, duplicated helpers/guards/writers, documented single-source bypass. |
+| Docs-claims | conditional | Documentation claims affected by changed behavior or interfaces. |
+| Parallel-site completeness | conditional | Sibling sites implementing the same changed behavior. |
+| Test-quality | conditional | Changed tests: behavior coverage, independent oracles and failure sensitivity. |
+
+Use the strongest available model/agent tier in fresh context. Record `prospec check --record-review --graded-by fresh-subagent` or `in-session` honestly; caps use dimension `graded_by`.

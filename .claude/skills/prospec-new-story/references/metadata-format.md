@@ -1,0 +1,241 @@
+# Metadata (metadata.yaml) Format Reference
+
+Reader's guide to `.prospec/changes/{name}/metadata.yaml`: **CLI-written, skill-read**; never hand-serialize it. Writers: `change story`, `change scale`, `change related-modules`, `change auto-draft`, `change status`, `change log`, `verify record`, `check --record-review` / `--record-tests`, `change abandon`, `archive`.
+
+The CLI's `ChangeMetadataSchema` owns field semantics; `prospec/ai-knowledge/_status-lifecycle.md` owns transitions; `metadata-completeness` enforces the required-field floor. Consult command `--help` for inputs.
+
+---
+
+## Abandonment and retry
+
+`prospec change abandon <name> --reason <text> [--overturned <field>]` owns terminal `abandoned` metadata: `reason`, `at`, `from_status`, `escalation` (last trigger/ordinal or null), `overturned` (scalar Premise leaves/values), `premise_note`, `manifest`. CLI returns `archiveDir` in the main worktree project: first available `.prospec/abandoned/YYYY-MM-DD-name/`, then `-2`, `-3`, … . Incomplete publication blocks retry; inspect its external history operation and retained paths; do not auto-unlock.
+
+Preservation does not restore work. Restoration is a human decision requiring explicit authorization.
+
+`retry_of` links completed same-issue attempts: `archive` is an abandoned entry ID with digest; empty means no matches, absent means legacy. Creation reports reasons, retains supplied proposals; skills author the difference. Abandoned entries never enter successful archive/finalize or review-yield.
+
+## Canonical field order
+
+`name` → `created_at` → `status` → `scale` → `related_modules` → `description` →
+`quality_log` → `review_provenance` → `test_provenance` → `test_attempt` → `delta_spec_provenance` → `issue` → `acceptance` → `premise_version` → `retry_of` → `abandonment`
+
+Existing documents containing YAML aliases retain their authored field order: anchor/alias bindings
+take precedence over canonical ordering. Comments and unknown fields remain preserved.
+
+| Field | Required | Written by | Notes |
+|-------|----------|-----------|-------|
+| `name` | yes | `prospec change story` (create) | change dir name (kebab-case) |
+| `created_at` | yes | `prospec change story` (create) | full ISO 8601 |
+| `status` | yes | `prospec change plan/tasks/status` + `verify record` (S/A) + `archive` + `change abandon` | one of the lifecycle values (`_status-lifecycle.md`), forward-only |
+| `scale` | no (defaults `standard`) | `prospec change scale`, after user-confirmed assessment; also `change auto-draft` at create time, from the drift check that triggered it | one of the schema's `CHANGE_SCALES` values |
+| `related_modules` | creation: yes; legacy: optional | `prospec change story` (`--related-module` or `--no-related-modules`); `change auto-draft` (attributed modules); `change related-modules` corrects it | bare module names |
+| `description` | no | `prospec change story --description` | one line, plain text |
+| `quality_log` | no | `prospec change log` (any station) + `verify record` (append) | gate trail — see below |
+| `review_provenance` | no | `prospec check --record-review` at review | machine-written baseline |
+| `test_provenance` | no | `prospec check --record-tests` at verify | machine-written test baseline — see below |
+| `test_attempt` | no | `prospec check --record-tests` | latest attempt, including running and uncertified outcomes |
+| `delta_spec_provenance` | no | `prospec check --record-review` | delta-spec baseline |
+| `issue` | no | `prospec change story --issue`, `prospec change auto-draft --issue` | external-tracker registration — see below |
+| `acceptance` | no | `prospec change story` (`--freeze-scenarios`, `--amend-scenarios`) | versioned acceptance baseline — see below |
+
+### `related_modules` — explicit scope declaration
+
+Absent means unknown; `[]` declares no related modules; a non-empty list declares scope. Use `prospec change related-modules <modules...> --change <name>` or `prospec change related-modules --change <name> --no-related-modules` for replacement with known names; no reason or history. Never hand-edit metadata.yaml.
+
+### `acceptance` — versioned acceptance baseline
+
+The CLI owns `acceptance:` through `AcceptanceBaselineSchema`; use `prospec change story --help` for inputs. Never serialize revisions by hand.
+- **Pending**: New scaffolds have no frozen revision. The `current_revision` pointer and `revisions` history are populated only after substantive scenarios are authored; pending contracts block plan (or quick tasks).
+- **Freeze**: Run `prospec change story <name> --freeze-scenarios` after authoring the proposal.
+- **Amend**: Run `prospec change story <name> --amend-scenarios --reason "<text>" --expected-digest <sha256>` to append a controlled revision. Every revision's origin follows its own `captured_status`; capture after story is disclosed as late-capture, including amendments.
+- **CLI-managed**: Both modes atomically update the baseline and quality_log. **Never hand-edit `metadata.yaml`** or fabricate revision history.
+
+### `test_provenance` — the recorded test run
+
+```yaml
+test_provenance:
+  fingerprint_version: snapshot-v2
+  scope: repository-inputs-v2
+  attempt_id: example-run
+  command: pnpm test              # the command as run (argv, no shell syntax)
+  exit_code: 0                    # recorded even when non-zero — a failing suite IS the fact
+  digest: 3f9c…                   # code fingerprint the run exercised
+  date: 2026-07-28                # bare ISO 8601 date
+```
+
+CLI-written, never hand-authored. `test-provenance` fails for absent records, stale effective inputs or nonzero exit. It is **not** part of `metadata-completeness`'s required-field floor.
+
+### `test_attempt` — latest invocation
+
+```yaml
+test_attempt:
+  id: example-run
+  outcome: passed                 # running | passed | failed | unprovable | timeout | unavailable
+  before_digest: 3f9c…
+  after_digest: 3f9c…
+  exit_code: 0                    # absent when no exit was observed
+```
+
+The CLI prewrites running. PASS requires provable equal before/after snapshots linked by attempt_id to the latest passed attempt. Nonzero test_provenance survives later unavailable/timeout/unprovable attempts. Review provenance also carries fingerprint_version/scope. Old/unknown versions remain readable but need real revalidation, never a stamp-only migration.
+
+### Opt-in test identity
+
+With `test_evidence.exclude_knowledge: true`, both `test_attempt` and `test_provenance` carry:
+
+```yaml
+fingerprint_version: test-inputs-v1
+scope: repository-inputs-without-knowledge-v1
+test_policy:
+  version: 1
+  excluded_path: prospec/ai-knowledge
+```
+
+`excluded_path` is the resolved project-relative Knowledge directory. Absent/false keeps the default identity. Reuse preserves records; missing/unknown/changed identity requires a real run. Review stays full-scope.
+
+### `issue` — the external-tracker registration
+
+```yaml
+issue: "#412"                     # quoted: unquoted, `#` opens a YAML comment
+```
+
+The tracker item this change belongs to, written once at scaffold time
+(`prospec change story --issue <ref>`). **Shape-free — its format is never validated**: prospec binds to no
+forge, so a bare reference (`#412`), a full URL, and another tracker's id (`ABC-123`) are equally
+valid, its shape is never judged, and nothing checks that the item exists or is still open. No API
+is called. Three consequences worth knowing:
+
+- **A value opening with `#` is emitted quoted** — it would otherwise read back as a YAML comment and
+  the whole value would vanish. The serializer handles this; do not add quotes by hand.
+- **Absent means unregistered.** A change that names no tracker item carries no `issue` key at all —
+  never an empty string, never `null` — so "not registered" stays distinguishable from "registered as
+  blank". A blank or whitespace-only value reads as unregistered, not as a registration.
+- **Runs of whitespace collapse to one space**, line breaks included — the one way the value is
+  normalized, and it is a safety measure, not a shape judgement. The reference is printed by
+  `prospec status` and by the archive summary that is copied into the committed spec-history trail,
+  where a second line would render a forged `##` heading or a forged `- **Quality Grade**:` row for
+  real. Same defence the pipe-table and code-span writers apply to free-form text.
+
+This is a **registration convention only**: outside the required-field floor (no pre-existing
+change turns red for lacking it) and enforced by no drift check. It names the *external item* the
+change belongs to, never another change. Whether a project registers one at all, how its
+tracker items map to changes, and how a merge closes them are that project's own conventions,
+documented in its contributor docs; this field only makes the link machine-readable.
+`prospec status` and the archive summary print it when present.
+
+## `quality_log` entry shape
+
+Fixed keys `skill` / `date` / `result` / `warnings`, plus
+optional structured keys that only certain stations write:
+
+```yaml
+quality_log:
+  - skill: prospec-review          # the station name
+    date: 2026-07-13               # bare ISO 8601 date
+    result: WARN                   # gate three-state ONLY: PASS | WARN | FAIL
+    warnings:
+      - "one finding per array item"
+    criticals_found: 0             # review only (optional)
+    criticals_fixed: 0             # review only (optional)
+    majors: 1                      # review only (optional)
+  - skill: prospec-plan
+    date: 2026-07-13
+    result: FAIL                   # the gate three-state the verdict maps to
+    warnings:
+      - "reuse: existing owner bypassed"
+    verifier_verdict: FLAWS        # plan/tasks verifier sink only (`change log --verifier-report`)
+    audited_option: option-a       # plan verifier sink only: the decision.json recommendation audited
+    audited_plan_digest: 9b1e…     # plan verifier sink only: the plan version audited
+  - skill: prospec-plan
+    date: 2026-07-14
+    result: PASS
+    warnings: []                   # the human's notes, if any
+    signoff_option: option-a       # plan sign-off only (`change log --signoff`)
+    signoff_plan_digest: 9b1e…     # plan sign-off only: the plan version signed
+  - skill: prospec-verify
+    date: 2026-07-13
+    result: PASS                   # still the gate three-state
+    warnings: []
+    grade: S                       # verify quality grade goes HERE, never in `result`
+    dimensions:                    # verify only (optional)
+      - name: task-completion
+        result: PASS
+        adjudicator: machine       # who decided: machine | judgment
+      - name: tests
+        result: PASS
+        adjudicator: machine
+      - name: delta-spec-compliance
+        result: WARN
+        adjudicator: judgment
+        graded_by: fresh-subagent  # judgment only: fresh-subagent | in-session
+        executor: "strongest-tier model, fresh subagent"  # optional self-report
+```
+
+- **`result` is always the gate three-state `PASS` / `WARN` / `FAIL`.** The `prospec-verify`
+  quality grade (`S`/`A`/`B`/`C`/`D`) is written to the separate `grade` key and is **never in
+  `result`** — `result: A` is malformed.
+- **A `dimensions` entry's `result` has a wider vocabulary than the gate's**: `PASS` / `WARN` /
+  `FAIL` / `not-applicable` / `not-adjudicated`. Any dimension that does not apply to the change is
+  recorded `not-applicable` — never omitted and never `PASS`, so an unchecked dimension stays
+  distinguishable from a passed one. This covers every skip reason, not just scale: no delta-spec
+  under `quick`, no tasks.md under `backfill`, the design dimension under `ui_scope: none`, and the
+  knowledge dimension when no Knowledge base exists. `not-adjudicated` is the **different** case
+  where the dimension applies but its machine adjudicator could not run (drift engine unavailable, or
+  its check `skipped`) — "no verdict", not "moot". Both are valid **only** here, never as the
+  entry-level `result`.
+- **`adjudicator`** (optional, verify only) records who decided the dimension: `machine` for the
+  engine-adjudicated ones (task completion, knowledge, tests) and `judgment` for the ones a
+  fresh-context reviewer grades. Absent on entries written before the field existed.
+- **`graded_by` / `executor`** (optional, judgment dimensions only) record the grading
+  context, so a PASS is attributable. `graded_by` is `fresh-subagent` or `in-session` — required for a
+  judgment dimension at the `verify record` write path (refused when absent), but optional at the
+  schema level so machine dimensions and pre-existing entries stay valid; `in-session` mechanically
+  caps the grade below S. `executor` is a free-string self-report (model / harness) — optional and
+  non-blocking; it is recorded so a per-executor statistic can be aggregated later, and no station
+  consumes it yet. prospec detects no model: both are self-declared.
+- **`verifier_verdict`** (plan/tasks only) is written solely by `prospec change log --verifier-report`
+  — the verifier's own verdict (`PASS` | `WARN` | `FLAWS`; `FLAWS` maps to `result: FAIL`). It is the
+  provenance stamp `prospec status` keys on: a stamped entry is the station's verifier result, a
+  later stamped `PASS`/`WARN` supersedes a stamped `FLAWS`, and a station's own Exit Gate entry under
+  the same skill (unstamped) is never read as one. Legacy unstamped Break-Glass `WARN` entries with `Manual override:` remain historical evidence,
+  but cannot unlock a pending escalation. New grants are explicit composed WARNs with a nonempty human reason, bound by the CLI to the current event and station; report warning text grants nothing.
+- **`audited_option`** / **`audited_plan_digest`** (plan only) are stamped by the same sink: the
+  schema-valid `candidates/decision.json` recommendation, and the plan.md + delta-spec.md version, the verifier audited.
+- **`signoff_option`** (plan only) is written solely by `prospec change log --signoff` — the human's
+  plan sign-off: a candidate option (`option-a` | `option-b` | `option-c` | `hybrid`) at full scale, `plan` otherwise —
+  with **`signoff_plan_digest`**, the plan version signed. The CLI states its own acceptance rules. It
+  releases the plan pause while no later verifier entry follows it and the plan is unchanged, and it is provenance,
+  not a gate result: it neither counts as a verifier result nor hides an unresolved WARN.
+- `warnings` is always present (use `[]` when none); each entry is one string.
+- Omit the optional keys entirely when they do not apply — do not write them as `null`/empty.
+
+## Canonical example (a standard change mid-lifecycle)
+
+```yaml
+name: add-widget-export
+created_at: 2026-07-13T09:51:00.000Z
+status: tasks
+scale: standard
+related_modules:
+  - services
+  - tests
+description: Add CSV export to the widget service
+quality_log:
+  - skill: prospec-ff
+    date: 2026-07-13
+    result: PASS
+    warnings: []
+issue: "#412"
+```
+
+## Escalation Ledger (CLI-Owned)
+
+`quality_log` is the sole ledger: dedicated `prospec-escalation` entries carry
+`escalation.kind` trigger / resolve / override / consume, an event and station binding,
+and (for grants) reason, grant ID and the consuming attempt. Station sinks own
+`attempt_id` and `accepted` receipts. Never hand-author these fields or counters.
+`status`, verify and archive retain lifetime reasons and usage after later PASS;
+legacy incomplete coverage is disclosed, not guessed.
+
+## Premise Contract Version
+
+`premise_version: 1` is written by new-story scaffolding, including auto-draft. The editable declaration lives in proposal.md's `## Premise` (see proposal-format). New standard/full changes require a ready declaration before advancing; quick/backfill are exempt. An absent version identifies a legacy change and stays admissible with a limitation; malformed/unknown versions and unreadable metadata refuse. Version declaration and verification are separate: the CLI checks structure and does not authenticate evidence.

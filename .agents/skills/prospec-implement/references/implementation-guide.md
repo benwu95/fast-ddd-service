@@ -1,0 +1,112 @@
+# Implementation Guide
+
+This document provides implementation guidelines for the **prospec-implement** Skill.
+
+---
+
+## Implementation Principles
+
+### 1. TDD Approach
+
+`prospec/CONSTITUTION.md` governs TDD and carries its RFC-2119 severity — follow the workflow to the extent it mandates (a `[MUST]` rule is not optional):
+
+1. **Write tests first:** Write corresponding unit tests before implementing functionality
+2. **Red-Green-Refactor cycle:**
+   - Red: Write test, ensure it fails
+   - Green: Implement minimum functionality to pass the test
+   - Refactor: Optimize code quality
+3. **Test coverage:** Ensure core logic has sufficient test coverage
+
+---
+
+### 2. Task Execution Order
+
+Follow the architecture-layer sequence defined in `tasks.md` — the project's own layers, lowest-dependency first (e.g. `Domain → Ports → Adapters → Tests`, or `Models → Services → Controllers → Tests`).
+
+**Dependency rules:**
+- Complete depended-upon (lower) layers first
+- Then implement the layers that depend on them
+- `[P]` marked tasks can be executed simultaneously (no dependencies)
+
+**Example execution order** (illustrative only — a layered example project; substitute your project's own layers):
+
+```
+1. Domain/Define ErrorType enum
+2. Domain/Create ErrorResponse interface
+3. [P] Ports/Implement BaseError class (parallelizable)
+   [P] Ports/Implement ErrorFormatter utility (parallelizable)
+4. Ports/Create error factory functions (depends on BaseError)
+5. Adapters/Integrate with API middleware (depends on BaseError, ErrorFormatter)
+```
+
+---
+
+### 3. Progressive Disclosure
+
+**Only load AI Knowledge relevant to the current task:**
+
+1. **Before starting:** Read `prospec/index.md` to understand overall architecture
+2. **During task execution:** Only read `prospec/ai-knowledge/modules/{module}/README.md` for the relevant module
+3. **Avoid:** Loading all AI Knowledge files at once
+
+**Example:**
+
+When executing task `Implement BaseError class`:
+- Read `prospec/ai-knowledge/modules/error-handler/README.md`
+- No need to read `api-middleware`, `logger`, or other module READMEs
+
+---
+
+### 4. Task Completion Marking
+
+**Mark complete immediately via the CLI:**
+
+After completing each task, run `prospec change progress --complete <task-id>` — the CLI owns the
+checkbox state; never hand-flip a task's checkbox:
+
+```bash
+prospec change progress --complete <task-id>
+```
+
+This keeps progress accurate and avoids duplicate work.
+
+---
+
+### 5. Commit Strategy
+
+**Do not commit during implement.** The commit boundary is after `prospec-verify` reaches Grade S/A: implement, review, and verify all operate on the working tree, and the change is then committed **once** as a single atomic-by-feature commit.
+
+- **Why defer:** committing after each task group breaks atomic-by-feature the moment review or verify requires a fix; the provenance order is content finalized → record → commit → archive.
+- **At the boundary:** follow the commit rules in `prospec/CONSTITUTION.md` for message format and grouping — this guide does not restate them. prospec prompts the user to commit; it never auto-commits.
+
+---
+
+### 6. Error Handling
+
+**If a task fails:**
+
+1. **Record blocker:** Document the issue in `tasks.md` or the Story's Notes
+2. **Continue execution:** If there are other independent tasks, continue with them
+3. **Report:** Report incomplete tasks and reasons when Story is finalized
+
+**Example:**
+
+```markdown
+## Blockers
+
+- Task "Integrate with API middleware" blocked: API middleware module not yet merged from another branch
+```
+
+---
+
+### 7. Code Quality Checks
+
+**After completing implementation, run the project's own quality gates — do not assume a fixed set
+of scripts exists:**
+
+1. **Tests:** resolve the command via the `project-test-runner` reference's hierarchy
+   (`.prospec.yaml` `tech_stack.test_command` → declared package manager → ecosystem detection) —
+   never a hardcoded script name.
+
+2. **Other gates (lint, type-check, coverage, …):** run whatever `prospec/CONSTITUTION.md` and
+   `.prospec.yaml` define for this project; skip a gate the project does not declare.

@@ -1,0 +1,194 @@
+<!-- prospec:auto-start -->
+# fast-ddd-service
+
+> AI-augmented project with Prospec Skills and structured AI Knowledge
+
+## Tech Stack
+
+- **Language**: python
+- **Package Manager**: poetry
+
+## Language Policy
+
+All generated documents — change artifacts (`.prospec/changes/**`, `.prospec/archive/**`, `.prospec/abandoned/**`, `prospec/specs/_archived-history/**`) and the trust zone (`prospec/CONSTITUTION.md`, `prospec/README.md`, `prospec/index.md`, `prospec/specs/product.md`, `prospec/specs/features/**`, `prospec/ai-knowledge/**`) — are written in **Traditional Chinese (Taiwan)**, and requests may be phrased in it; code, identifiers, technical terms, and git commit messages stay English (see the Constitution's Language Policy rule, generated from this same path set).
+
+## Core Resources
+
+### Constitution
+Project principles and constraints: [`prospec/CONSTITUTION.md`](prospec/CONSTITUTION.md)
+
+### AI Knowledge Base
+Module index and project structure (L1-L3 navigation): [`prospec/index.md`](prospec/index.md)
+
+### Coding Conventions
+Coding standards and best practices: [`prospec/ai-knowledge/_conventions.md`](prospec/ai-knowledge/_conventions.md)
+Diagram conventions: [`prospec/ai-knowledge/_diagram-conventions.md`](prospec/ai-knowledge/_diagram-conventions.md)
+Project glossary and domain terms: [`prospec/ai-knowledge/_glossary.md`](prospec/ai-knowledge/_glossary.md)
+
+## Available Prospec Skills
+
+Prospec Skills use bare `prospec-<name>` as their canonical identity. Use the host-specific guidance below only when you want to invoke a Skill explicitly; descriptions and trigger words continue to support implicit discovery.
+
+## Invoking a Prospec Skill
+
+| Host | Explicit invocation |
+|------|---------------------|
+| Codex | `$prospec-<name>` |
+| Antigravity | Mention the bare Skill name or select it from the Skills browser. `prospec-<name>` |
+
+This project ships with the following Prospec Skills:
+
+### prospec-explore
+
+Explore - Requirement exploration, problem investigation, and solution comparison partner — clarifies before a Story exists, not the Story writer itself.
+
+**Type**: Lifecycle
+**Triggers**: explore, compare, investigate, unsure, clarify — or equivalent terms in Traditional Chinese (Taiwan)
+
+### prospec-new-story
+
+New Story - Create change requests by guiding User Story and acceptance criteria definition — the SDD entry station, not a generic issue or ticket writer.
+
+**Type**: Planning
+**Triggers**: new feature, requirement, user story — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-new-story/references/`
+
+### prospec-plan
+
+Plan Implementation - Convert User Story into technical implementation plan (plan.md) and change specification (delta-spec.md) — the SDD plan station, not ad-hoc architecture discussion.
+
+**Type**: Planning
+**Triggers**: plan, architecture, technical plan — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-plan/references/`
+
+### prospec-design
+
+Design Phase - Generate visual and interaction specs from proposal (Generate Mode) or extract specs from existing design tools (Extract Mode). Supports pencil/Figma/Penpot/HTML platforms. UI scope only — not architecture design (that is the plan station).
+
+**Type**: Planning
+**Triggers**: UI spec, generate design, extract design — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-design/references/`
+
+### prospec-tasks
+
+Break Down Tasks - Decompose implementation plan into an actionable task checklist (tasks.md) — the SDD station after plan, not a generic todo tool.
+
+**Type**: Planning
+**Triggers**: break down, task list, work items, how to split — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-tasks/references/`
+
+### prospec-ff
+
+Fast-Forward Planning - Generate complete planning artifacts in one pass (Story → Plan → Tasks) — for clear requirements, not exploration.
+
+**Type**: Planning
+**Triggers**: fast-forward, ff, all at once — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-ff/references/`
+
+### prospec-implement
+
+Implementation - Execute tasks from the task list, implementing features one by one — driven by tasks.md, not free-form coding without a task list.
+
+**Type**: Execution
+**Triggers**: implement, start coding, write code — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-implement/references/`
+
+### prospec-review
+
+Adversarial Code Review → Fix Loop - Between implement and verify, an independent fresh-context reviewer audits the whole change diff; verifier-confirmed criticals are auto-fixed, majors are proposed, and a spec-aware lens checks delta-spec/dependency-direction — the SDD station between implement and verify, not ad-hoc PR review.
+
+**Type**: Execution
+**Triggers**: code review, adversarial review, find bugs — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-review/references/`
+
+### prospec-verify
+
+Verify Implementation - Run 5+1 dimension audit (tasks, spec compliance, constitution, knowledge-implementation consistency, tests, design consistency) and assign quality grade (S/A/B/C/D) — the SDD gate before archive, not a plain test run.
+
+**Type**: Execution
+**Triggers**: verify, audit, quality check — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-verify/references/`
+
+### prospec-knowledge-generate
+
+Generate AI Knowledge - Read raw-scan.md, analyze project structure, autonomously decide module boundaries, and produce Recipe-First module READMEs and index — first-time seeding, not the incremental update after a change.
+
+**Type**: Lifecycle
+**Triggers**: generate knowledge, analyze project, module split — or equivalent terms in Traditional Chinese (Taiwan)
+
+### prospec-archive
+
+Archive Changes - Archive completed changes, generate summary, sync requirements to feature specs, and gate archiving on Knowledge sync — the SDD terminal station, not git tagging or a release.
+
+**Type**: Lifecycle
+**Triggers**: archive, spec sync, finalize change — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-archive/references/`
+
+### prospec-knowledge-update
+
+Incremental Knowledge Update - Parse delta-spec.md to identify affected modules, scan source code, and update module README, index.md, and module-map.yaml incrementally — after a change, not the first-time knowledge scan.
+
+**Type**: Lifecycle
+**Triggers**: knowledge update, incremental update, sync knowledge, update docs — or equivalent terms in Traditional Chinese (Taiwan)
+
+### prospec-backfill-spec
+
+Backfill Spec - Reverse-extract a behavioral Feature Spec draft from existing brownfield code (source = code, not a design tool) for features/capabilities with no spec coverage. Records behavior, never intent; stages a draft for human verify-and-promote and never writes the trust zone.
+
+**Type**: Lifecycle
+**Triggers**: backfill spec, spec from code, brownfield, document existing code — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-backfill-spec/references/`
+
+### prospec-promote-backfill
+
+Promote Backfill - Formalize a reviewed backfill-draft.md into the backfill change scaffold (proposal.md + delta-spec.md + metadata.yaml with scale: backfill, status: implemented) so brownfield behavior can graduate through verify → archive. A light scale like quick — no hollow plan.md/tasks.md; the single, repeatable draft→scaffold step; never writes the trust zone — promotion only, not the draft extraction itself.
+
+**Type**: Lifecycle
+**Triggers**: promote backfill, formalize backfill, backfill to delta-spec, promote draft — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-promote-backfill/references/`
+
+### prospec-learn
+
+Feedback Promotion Pipeline - Collect session corrections, repeated verify FAILs and recurring review criticals into a version-controlled lessons ledger; score them with an explicit, reproducible rule (frequency + impact modules); and promote - only with explicit human approval - across three tiers (accumulating ledger -> team playbook -> Constitution rule) — a ledger for recurring lessons, not a one-off note taker.
+
+**Type**: Lifecycle
+**Triggers**: learn, promote lesson, playbook — or equivalent terms in Traditional Chinese (Taiwan)
+**References**: `.agents/skills/prospec-learn/references/`
+
+
+## Session Start
+
+At the start of a session, run `prospec status` — it deterministically reports each in-progress
+change's name, current node, suggested next step, and blocking gates (the executable copy of
+`prospec/ai-knowledge/_status-lifecycle.md`). The prospec CLI (version ≥ 2.8.0)
+is a required file for the prospec skills: when it is missing or too old, STOP and install/upgrade
+the standalone executable before running any skill — never substitute manual steps.
+
+## Working with This Project
+
+**Constraint**: Follow the L0-L3 progressive loading model. Always read `prospec/index.md` (L1) first. Never load L2 (Module READMEs) or L3 (Source Code) proactively before identifying the required modules.
+
+**Station Transition Protocol**: The SDD workflow advances through stations. On advancing to ANY new station — whether `prospec status` routed you there or you cascaded to it autonomously — run `prospec status` first: it names the station's canonical `prospec-<name>` Skill, its reference map, and the resolved skill file as a separate fallback. Load that station's instructions BEFORE taking any station action:
+
+- Read the named station's `SKILL.md` — the fallback path under `.agents/skills/` — on every transition and re-entry.
+
+Then read that station's references at the phases it names; loading a station never means its references arrived. If that read does not yield the station's instructions, STOP and name what is missing — never act on remembered rules, and never skip an entry gate or a receipt. Accumulated context is no substitute: a long session's diffs and logs dilute the initial instructions.
+
+**Checkpoint Correction Capture Protocol**: At natural reflection points — at session end, or before archiving a change — review the developer corrections you received this session and record each *generalizable* one via `prospec learn upsert` (a cross-cutting architecture, type-contract, testing, or security rule — never a one-off mock or business-string tweak; the deciding heuristic lives in the `prospec-learn` Skill's promotion-format reference under `.agents/skills/`, which you read with your file-reading tool rather than guessing from memory), naming its modules from `prospec/ai-knowledge/module-map.yaml` and terms from `prospec/ai-knowledge/_glossary.md`, with the `description` in the language the correction was given. Stay silent — do not interrupt the conversation or ask a blocking question — and surface a single line only when the command reports a promotion suggestion. Keep this ledger write a separate concern; never fold it into a feature commit.
+
+1. **Before starting**: Read the Constitution to understand project principles
+2. **Understand the structure**: Consult the AI Knowledge Index to grasp the module architecture
+3. **Coding standards**: Follow the style guide in the Conventions document
+4. **Use Skills**: Trigger dedicated workflows via their bare `prospec-<name>` identity
+5. **Module dependencies**: Check `prospec/ai-knowledge/module-map.yaml` before modifying
+
+## Notes
+
+- This file is Layer 0 (always loaded) — keep it lean and point to other resources
+- Skills are Layer 1-2 — detailed instructions load on demand
+- The Knowledge Base is on-demand — load according to the scope of work
+<!-- prospec:auto-end -->
+
+<!-- prospec:user-start -->
+<!-- Add your own project-specific instructions below. This section is preserved across `prospec agent sync`. -->
+<!-- prospec:user-end -->

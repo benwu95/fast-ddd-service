@@ -1,0 +1,63 @@
+# Backfill Verification Reference (`scale: backfill`)
+
+This document defines the specialized verification rules and quality criteria used by `prospec-verify` when verifying brownfield reverse-extracted specs (`metadata.scale: backfill`).
+
+---
+
+## Core Philosophy: Spec-to-Code Fidelity
+
+Under `scale: backfill`, the existing code is the **ground truth**. The goal of verification is to ensure the generated Feature Spec faithfully captures observable code behavior without inventing intent or fabricating requirements.
+
+---
+
+## 1. Provenance Gate (`backfill-draft.md`)
+
+Proven backfill requires both `metadata.scale: backfill` and `.prospec/changes/[name]/backfill-draft.md` exists. Apply the quality relaxations below only when that provenance holds:
+- Verify checks whether `.prospec/changes/[name]/backfill-draft.md` exists.
+- **`backfill-draft.md` present**: The change is a proven backfill. Apply the quality relaxations below.
+- **`backfill-draft.md` absent**: Grade the change under the **standard** contract (missing tests → graded normally, Constitution `[MUST]` code-quality violations → FAIL) and log a WARN: "`scale: backfill` claimed but no `backfill-draft.md` — graded as standard".
+
+---
+
+## 2. Planning Artifacts & Review Exemption
+
+- **Planning Artifacts**: Only `proposal.md` and `delta-spec.md` are required. `plan.md` and `tasks.md` are omitted by contract (backfill records existing code; forward planning is hollow make-work).
+- **Implementation Status**: `metadata.status: implemented` (stamped by `prospec-promote-backfill`) satisfies the implementation gate.
+- **Review Provenance**: `review-provenance` skips proven backfill changes; code review is optional.
+
+---
+
+## 3. Five-Dimension Evaluation Rules
+
+### Dimension 1/5: Task Execution
+- Marked as **`not-applicable`** (no `tasks.md` exists by contract).
+
+### Dimension 2/5: Specification Compliance (Primary Graded Dimension)
+- **Prepared Context & Payload Contract**: Dimension 2/5 applies the shared prepared-context and per-REQ payload contract (`items`, `context_id`, `scenario_findings`) per [`references/delegated-evidence-format.md`](delegated-evidence-format.md) — never recreate a second schema.
+- **No Fabricated Baseline**: Backfill never fabricates an original pre-implementation story baseline; evaluation checks spec-to-code fidelity against observable code.
+- **Baseline Gap & Grade Caps**: When the original pre-implementation baseline is unavailable or the current revision was captured late (`late-capture`), disclose the baseline gap as `not-adjudicated` with the shared single dimension-level gap warning. Real `FAIL` verdicts are strictly preserved and never masked by the gap. Grade S is unreachable (capped below S due to unadjudicated baseline); grade A is reachable when all other gates and the existing grade-A budget allow it.
+- **Fidelity Check**: Every requirement in `delta-spec.md` must accurately reflect the observable behavior of the source code.
+- **Anchor Resolution**: Every cited `file:line` or function symbol in `delta-spec.md` must resolve to real code. A dead reference is a **FAIL**.
+- **No Empty PASS**: An AC with **no `file:line` evidence** to check → **WARN/FAIL**, **NEVER an empty PASS** — unverifiable fidelity is not fidelity.
+- **No Fabricated Intent**: The spec must document observable behavior, not speculative business intent.
+
+### Dimension 3/5: Constitution & Conventions
+- **Pre-existing Code Violations**: Any pre-existing `[MUST]` code-quality violation (e.g. legacy layering, low test coverage) that the backfill did NOT introduce is recorded as an **informational tech-debt note** ("pre-existing, not introduced by this backfill") and **does NOT lower the grade**.
+- **Artifact Violations**: The backfill artifacts themselves must strictly comply with Constitution rules (Language Policy, INVEST User Story format, No Fabricated Intent).
+
+### Dimension 4/5: Knowledge & Module Consistency
+- Confirm affected modules listed in `metadata.related_modules` accurately match the inspected source directories.
+
+### Dimension 5/5: Tests
+- **Test Absence Tolerance**: The absence of unit tests for the documented brownfield functions is **informational** (expected in brownfield code).
+- **Real Test Failures**: Any existing test in the test suite that actually **fails** is a hard **FAIL**.
+
+---
+
+## 4. Final Knowledge Preparation & Commit Confirmation
+
+- **Knowledge Sync**: Run `prospec knowledge update --change <name>` before final review/tests/verify. Sync the READMEs of the modules `prospec knowledge update --change` reports ∪ `metadata.related_modules`, then stamp freshness via `prospec knowledge verify <modules...>`. Follow the final preparation order in [`cascade-protocol.md`](cascade-protocol.md).
+- **Commit Confirmation (S/A only)**: Confirm Knowledge and stamps already belong to the validated inputs. Incomplete preparation returns to the step above; effective-input edits require final review/tests/verify again before the human commit boundary.
+- **Grade S/A Meaning**: Report the recorded fidelity judgments and limitations; the CLI determines the overall grade.
+
+With Knowledge exclusion enabled, the shared test gate may reuse compatible evidence; review/context freshness, Knowledge checks and pre-merge CI still apply.

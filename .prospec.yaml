@@ -1,0 +1,23 @@
+version: 2.8.0
+project:
+  name: fast-ddd-service
+tech_stack:
+  language: python
+  package_manager: poetry
+  source: auto-detected
+paths:
+  base_dir: prospec
+artifact_language: Traditional Chinese (Taiwan)
+trust_zone_language: Traditional Chinese (Taiwan)
+exclude:
+  - "*.env*"
+  - "*credential*"
+  - "*secret*"
+  - node_modules
+  - .git
+agents:
+  - claude
+  - codex
+  - antigravity
+knowledge:
+  base_path: prospec/ai-knowledge

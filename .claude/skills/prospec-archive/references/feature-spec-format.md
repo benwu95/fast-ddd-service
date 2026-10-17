@@ -1,0 +1,153 @@
+# Feature Spec Format Reference
+
+This document defines the format for Feature Specs in `prospec/specs/features/`. Feature Specs are **living documents** that accumulate User Stories and requirements across multiple changes. User Stories are the core organizational unit; REQ IDs serve as engineering traceability sub-items.
+
+---
+
+## Naming Convention
+
+Name files by **user-facing feature**, not by implementation module:
+
+| Feature Name | Covers |
+|-------------|--------|
+| `authentication.md` | Sign-in, Sign-out, Session Management |
+| `orders.md` | Cart, Checkout, Order Tracking |
+| `billing.md` | Invoices, Payments, Refunds |
+| `notifications.md` | Email, Push, Delivery Preferences |
+| `reporting.md` | Dashboards, Exports, Scheduled Reports |
+
+New features can be added as the product grows.
+
+---
+
+## Standard Format
+
+### 1. Frontmatter
+
+```yaml
+---
+feature: {feature-slug}
+status: active
+last_updated: {YYYY-MM-DD}
+story_count: {N}
+req_count: {N}
+---
+```
+
+### 2. Title + Who & Why
+
+```markdown
+# {Feature Title}
+
+## Who & Why
+
+**Target users**: [Target users]
+
+**Problem solved**: [Problem being solved]
+
+**Why it matters**: [Why this feature matters — value proposition]
+```
+
+### 3. User Stories & Behavior Specifications
+
+User Stories are the **primary organizational unit**. REQ IDs appear as sub-items under the Story they implement.
+
+```markdown
+## User Stories & Behavior Specifications
+
+### US-NNN: {Story Title} [{Priority}]
+
+{As a [role],}
+{I want [capability],}
+{So that [value].}
+
+**Acceptance Scenarios:**
+- WHEN {condition} THEN {expected behavior}
+- WHEN {condition} THEN {expected behavior}
+
+#### REQ-{MODULE}-{NNN}: {Requirement Title}
+{Brief description of the system behavior.}
+
+**Scenarios:**
+- WHEN {condition}, THEN {expected behavior}
+- WHEN {condition}, THEN {expected behavior}
+
+---
+```
+
+> The `**Scenarios:**` label is **optional**, and it belongs to a **hand-authored** spec only — a REQ
+> whose body is a description plus bare `- WHEN …, THEN …` bullets is equally valid, and that is the
+> shape a body landed from a delta-spec `**Spec:**` block takes. Both read the same; do not add the
+> label to a landed body just to match the scaffold above.
+>
+> **Never put this label inside a delta-spec `**Spec:**` block.** That block ends at the delta-spec
+> template's own field labels, so `**Scenarios:**` inside it is not a boundary but a truncation:
+> `prospec archive` refuses the REQ, leaves this file byte-identical and exits non-zero, naming the
+> label and the first line it swallowed. Write the bullets directly under the statement instead. See
+> the Delta Spec's "**Spec:**" block format, which states the same rule from the authoring side —
+> the two references must agree.
+
+### 4. Edge Cases
+
+```markdown
+## Edge Cases
+
+- {Edge case}: {Expected behavior}
+- {Edge case}: {Expected behavior}
+```
+
+### 5. Success Criteria
+
+```markdown
+## Success Criteria
+
+- **SC-1**: {Measurable outcome}
+- **SC-2**: {Measurable outcome}
+```
+
+### 6. Maintenance Rules
+
+Every Feature Spec must include these rules:
+
+```markdown
+## Maintenance Rules
+
+1. **Replace-in-Place**: MODIFIED User Stories and REQs directly replace existing versions
+2. **Functional Grouping**: New requirements insert under the corresponding User Story
+3. **No Inline Provenance**: Historical attribution only in Change History table
+4. **Deprecation over Deletion**: Removed requirements move to Deprecated section
+```
+
+### 7. Deprecated Requirements
+
+```markdown
+## Deprecated Requirements
+
+_(None)_
+```
+
+When a requirement is removed, `prospec archive` lists it here as a bullet:
+
+```markdown
+- **REQ-{MODULE}-{NNN}**: {title} _(removed YYYY-MM-DD)_
+```
+
+For the `req-references` check, keeping that bullet keeps references to the REQ ID resolving; so does striking the requirement's active section in place beside it, or deleting the active section and rewriting the entry as a struck heading `#### ~~REQ-{MODULE}-{NNN}: {title}~~`. Only a heading is a definition: `prospec spec show` and `req-id-uniqueness` read headings alone, so a REQ recorded only as a bullet is not found by them and its ID is not protected from reuse. Add the removal reason to the entry when you delete or strike the active section.
+
+### 8. Change History
+
+```markdown
+## Change History
+
+| Date | Change | Impact | Stories/REQs |
+|------|--------|--------|-------------|
+| {date} | {change-name} | {brief description} | US-NNN, REQ-XXX-NNN |
+```
+
+---
+
+## File Length Guidelines
+
+- Keep under **300 lines** per Feature Spec (or ≤ 5000 tokens)
+- If a Feature Spec exceeds the token budget, split it into per-story slices by creating a `## Slices` index in the main file (e.g., `- [Slice Name](./{feature-slug}/{slice}.md)`) and moving stories into those slice files.
+- User Stories section should occupy **40%+** of total content (not REQ-dominated)

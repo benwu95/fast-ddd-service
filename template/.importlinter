@@ -1,0 +1,76 @@
+[importlinter]
+root_packages =
+    app
+include_external_packages = True
+unmatched_ignore_imports_alerting = error
+
+[importlinter:contract:layers]
+name = Layers: port > adapter > core
+type = layers
+layers =
+    app.port
+    app.adapter
+    app.core
+
+[importlinter:contract:core]
+name = Core has no framework, kernel adapter/port, or settings dependencies
+type = forbidden
+source_modules =
+    app.core
+forbidden_modules =
+    fast_ddd_adapter
+    fast_ddd_port
+    pydantic
+    sqlalchemy
+    fastapi
+    faststream
+    app.settings
+
+[importlinter:contract:adapter]
+name = Adapter does not depend on HTTP, the kernel port, or settings
+type = forbidden
+source_modules =
+    app.adapter
+forbidden_modules =
+    fast_ddd_port
+    fastapi
+    app.settings
+
+[importlinter:contract:port]
+name = Port reaches repositories only through controllers
+type = forbidden
+source_modules =
+    app.port
+forbidden_modules =
+    app.adapter.repository
+allow_indirect_imports = True
+
+[importlinter:contract:bounded-contexts]
+name = Bounded contexts are independent
+type = independence
+modules =
+    app.core.*
+
+[importlinter:contract:composition]
+name = Only entry points import the composition root
+type = forbidden
+source_modules =
+    app.core
+    app.adapter
+    app.port
+forbidden_modules =
+    app.bootstrap
+    app.wiring
+    app.main
+    app.consumer
+    app.task_worker
+
+[importlinter:contract:task-queue]
+name = PgQueuer stays behind the kernel's TaskQueue
+type = forbidden
+source_modules =
+    app.core
+    app.adapter
+    app.port
+forbidden_modules =
+    pgqueuer

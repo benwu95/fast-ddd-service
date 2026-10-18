@@ -1,7 +1,7 @@
 ---
 product: fast-ddd-service
-version: phase-1
-last_updated: 2026-10-17
+version: phase-2
+last_updated: 2026-10-18
 ---
 
 # fast-ddd-service — Python DDD／Event-driven 參考架構
@@ -10,7 +10,7 @@ last_updated: 2026-10-17
 
 提供 Python AI 開發 skill 的共用架構基礎，讓服務開發者沿用可驗證的 DDD／Event-driven 邊界，避免每個服務重建 transaction、tenant、HTTP、MQ 與背景工作機制。
 
-Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務；後續以此抽出 copier template，再提供產生服務與 bounded context 的 skills／recipes。
+Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務；Phase 2 提供可獨立使用及客製化的 Copier 服務骨架。後續再提供產生服務與 bounded context 的 skills／recipes。
 
 ## Target Users
 
@@ -47,6 +47,11 @@ Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務�
 提供三個執行角色的組裝、health 與資源清理，並以 telemetry、品質工具及追溯證據支持維護。
 → [features/runtime-foundation.md](features/runtime-foundation.md)
 
+### service-template
+
+產生具有自有 lock／venv、三種執行角色與 migrations 的空服務；開發者可直接客製化外層，選擇更新時合併修改並處理衝突。框架 CI 驗證 example 漂移與分發產物。
+→ [features/service-template.md](features/service-template.md)
+
 ## Core User Stories Summary
 
 後端開發者可沿用 kernel 的型別、儲存與交易；API 整合者可依公開 contract 操作 Invoice；MQ consumer 可隔離處理事件；工作維護者可驗證 enqueue、重送與排程；服務維護者可執行各角色並追溯品質證據。
@@ -60,5 +65,5 @@ Python domain／DB／內部事件使用 snake_case，API／MQ 固定欄位使用
 | Phase | Status | Key Capabilities |
 |-------|--------|------------------|
 | Phase 1 | 已完成並通過 Grade S verify | kernel、Invoice 參考服務及永久行為規格 |
-| Phase 2 | 規劃中，尚未交付 | copier template 與 copy／update／recopy 驗證 |
+| Phase 2 | 已完成並通過 Grade A verify | Copier 骨架、客製化更新、產物與漂移驗收；保留 late-capture 歷史限制 |
 | Phase 3 | 規劃中，尚未交付 | fast-ddd／fast-ddd-init、recipes 及 marketplace |

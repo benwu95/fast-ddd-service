@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from app.task_worker import driver_dsn
-from tests.support import JWT_SETTINGS
+from tests.runtime.support import JWT_SETTINGS
 
-EXAMPLE_ROOT = Path(__file__).parent.parent
+EXAMPLE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def environment() -> dict[str, str]:
@@ -18,7 +18,6 @@ def environment() -> dict[str, str]:
         "SERVICE_NAME": "example",
         "DATABASE_URL": "postgresql+asyncpg://user:secret@db.invalid:5432/example",
         "RABBITMQ_URL": "amqp://guest:guest@rabbitmq.invalid:5672/",
-        "NOTIFICATION_URL": "https://notification.invalid",
         **{
             f"JWT__{key.upper()}": str(value)
             for key, value in JWT_SETTINGS.model_dump(exclude_defaults=True).items()

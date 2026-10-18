@@ -6,5 +6,6 @@
   "enableTypeIgnoreComments": false,
   "reportUnnecessaryTypeIgnoreComment": "error",
   "venvPath": "..",
+  "extraPaths": [".."],
   "venv": ".venv"
 }

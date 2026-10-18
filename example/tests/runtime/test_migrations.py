@@ -5,7 +5,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from tests.conftest import alembic_config
+from tests.runtime.conftest import alembic_config
 
 
 def test_each_branch_has_exactly_one_head(database_url: str) -> None:
@@ -20,7 +20,6 @@ def test_each_branch_has_exactly_one_head(database_url: str) -> None:
 
 
 async def test_models_have_no_pending_migration(database_url: str) -> None:
-    # `alembic check`: autogenerate against the migrated database finds nothing to do.
     await asyncio.to_thread(command.check, alembic_config(database_url))
 
 

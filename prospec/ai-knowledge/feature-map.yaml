@@ -20,3 +20,9 @@ features:
       - example
       - kernel
     status: active
+  - feature: service-template
+    modules:
+      - template
+      - example
+      - kernel
+    status: active

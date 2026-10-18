@@ -1,0 +1,50 @@
+_min_copier_version: '9.19.1'
+_subdirectory: template
+_skip_if_exists:
+  - pyproject.toml
+  - app/settings.py
+  - app/wiring.py
+  - app/adapter/resources.py
+  - app/adapter/repository/models.py
+  - tests/conftest.py
+  - tests/support.py
+  - alembic/versions/*
+
+service_name:
+  type: str
+  default: my-service
+  validator: >-
+    {% if not (service_name | regex_search('^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')) %}
+    service_name must contain lowercase words separated by hyphens
+    {% endif %}
+kernel_source:
+  type: str
+  default: git
+  choices: [git, path, workspace]
+kernel_git_url:
+  type: str
+  default: https://github.com/benwu95/fast-ddd-service
+  validator: >-
+    {% if not (kernel_git_url | regex_search('^https?://[^\\s"\\x00-\\x1f]+$')) %}
+    kernel_git_url must be an HTTP(S) Git repository URL
+    {% endif %}
+kernel_version:
+  type: str
+  default: 0.1.0
+  validator: >-
+    {% if not (kernel_version | regex_search('^[0-9]+\\.[0-9]+\\.[0-9]+$')) %}
+    kernel_version must be a three-part version
+    {% endif %}
+kernel_path:
+  type: str
+  default: ../kernel
+initialize_service_baseline:
+  type: bool
+  default: true
+coverage_minimum:
+  type: int
+  default: 80
+  validator: >-
+    {% if coverage_minimum < 80 or coverage_minimum > 100 %}
+    coverage_minimum must be between 80 and 100
+    {% endif %}

@@ -36,6 +36,11 @@ TABLES = (
 )
 
 
+@pytest.fixture(autouse=True)
+def reference_service_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOTIFICATION_URL", NOTIFICATION_URL)
+
+
 def alembic_config(database_url: str) -> Config:
     config = Config(str(EXAMPLE_ROOT / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", database_url)

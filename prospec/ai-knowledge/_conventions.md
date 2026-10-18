@@ -28,7 +28,7 @@ DomainError 帶穩定 error code 與 ErrorKind；port 映射為 Problem。已登
 
 ## Testing Conventions
 
-root `make check` 依序委派 `make -C kernel check` 與 `make -C example check` 執行格式檢查、lint、型別、import contracts 與 coverage。Coverage 下限 80%，pytest warnings 視為 error；DB／MQ 整合測試使用 Testcontainers，需要 Docker。兩套 DB fixture 均透過 Alembic `heads` 初始化；kernel 的 test-only branch 放在 `tests/migrations/`，不可包進 runtime wheel。兩個 `make check` 先做 `uv lock --check`；typing contract 由獨立 positive／negative fixture 驗證錯誤 ID。
+root `make check` 依序執行 tooling、kernel check、example check 與 snapshot drift。服務 checks 執行 lock、format、lint、strict typing、import contracts 與 coverage；example suite 另驗 Git／path 獨立環境、更新／衝突與三角色容器。Coverage 下限 80%，pytest warnings 視為 error；DB／MQ 整合測試使用 Testcontainers，需要 Docker。DB fixtures 透過 Alembic `heads` 初始化；kernel 的 test-only branch 不可包進 runtime wheel。typing contract 由獨立 positive／negative fixture 驗證錯誤 ID。
 
 ## Runtime Lifecycle
 

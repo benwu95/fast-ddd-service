@@ -1,0 +1,2 @@
+extend = "example/ruff.toml"
+src = ["scripts", "template"]

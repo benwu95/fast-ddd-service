@@ -9,6 +9,8 @@ repos:
       - id: check-added-large-files
       - id: check-toml
       - id: check-yaml
+      - id: check-merge-conflict
+        args: [--assume-in-merge]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.1
@@ -54,3 +56,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^(example|kernel)/
+      - id: template-tooling
+        name: template tooling
+        entry: make tooling
+        language: system
+        pass_filenames: false
+        files: ^(scripts|template)/|^copier\.yml$

@@ -75,6 +75,14 @@ kernel/
     migrations/
       versions/
     port/
+prospec/
+  ai-knowledge/
+    modules/
+      example/
+      kernel/
+  specs/
+    _archived-history/
+    features/
 ```
 
 ## Directories Without Source Files
@@ -93,6 +101,7 @@ kernel/
 > non-source ancestor, and both lists are ordered by file volume — a cap keeps the biggest, not the
 > alphabetically first.
 
+- `prospec/` — 25 files: `.md`, `.yaml`
 - `example/tests/typing_contracts/` — 2 files: `.txt`
 - `docs/` — 1 file: `.md`
 
@@ -100,5 +109,5 @@ kernel/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 168 |
+| Total files | 189 |
 | Scan depth | 10 |

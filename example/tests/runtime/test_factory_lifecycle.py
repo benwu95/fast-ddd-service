@@ -8,8 +8,8 @@ from fast_ddd_adapter.observability import Telemetry
 from faststream.rabbit import RabbitBroker
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app import bootstrap, consumer, main, wiring
-from tests.test_worker_lifecycle import settings
+from app import bootstrap, consumer, main
+from tests.runtime.support import settings
 
 
 @pytest.mark.parametrize("entrypoint", [main, consumer], ids=["api", "consumer"])
@@ -38,7 +38,7 @@ async def test_factory_failure_does_not_start_telemetry_or_connect_resources(
     brokers: list[RabbitBroker] = []
     clients: list[httpx2.AsyncClient] = []
     original_engine, original_broker = bootstrap.create_engine, bootstrap.create_broker
-    original_http = wiring.create_http_client
+    original_http = main.create_http_client
 
     def engine(*args: Any, **kwargs: Any) -> AsyncEngine:
         if failure == "engine":
@@ -61,7 +61,12 @@ async def test_factory_failure_does_not_start_telemetry_or_connect_resources(
 
     monkeypatch.setattr(bootstrap, "create_engine", engine)
     monkeypatch.setattr(bootstrap, "create_broker", broker)
-    monkeypatch.setattr(wiring, "create_http_client", http)
+
+    def wire_resources(_settings: object) -> list[bootstrap.Closer]:
+        client = http("extension", base_url="https://resource.test", timeout=5)
+        return [client.aclose]
+
+    monkeypatch.setattr(bootstrap, "wire_resources", wire_resources)
     monkeypatch.setattr(main, "create_http_client", http)
     if failure in {"session", "infrastructure"}:
         target = "create_session_factory" if failure == "session" else "configure"

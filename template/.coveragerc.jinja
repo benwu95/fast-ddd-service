@@ -1,0 +1,10 @@
+[run]
+source = app
+branch = true
+# SQLAlchemy's asyncio layer runs on greenlets; without this, code after a DB await is lost.
+concurrency = greenlet, thread
+
+[report]
+fail_under = {{ coverage_minimum }}
+show_missing = true
+skip_covered = true

@@ -8,7 +8,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "DTZ", "TID", "ASYNC", "P
 ignore = ["N818"]
 
 [lint.isort]
-known-first-party = ["app", "tests"]
+known-first-party = ["app", "scripts", "tests"]
 # The local alembic/ directory would otherwise make the library look first-party.
 known-third-party = ["alembic"]
 

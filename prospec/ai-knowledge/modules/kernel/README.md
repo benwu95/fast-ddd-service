@@ -36,6 +36,7 @@
 ## Pitfalls
 - 分層為 port → adapter → core；runtime packages 不可依賴 devtools。
 - 共用設定由 composition root 注入；不可讓 core 直接讀 settings。
+- MQ contract 測試以 event ID 對照 organization 與 payload，另驗數量與完整 ID 集合；handler 觀測順序不可當成發送順序。
 
 ## Sub-Modules
 - [Core](./core.md) — domain、context 與集合操作。

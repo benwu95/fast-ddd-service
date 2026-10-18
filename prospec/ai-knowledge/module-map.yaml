@@ -46,7 +46,7 @@ modules:
       used_by:
         - example
         - template
-    last_verified: 2026-10-18T06:36:07.701Z
+    last_verified: 2026-10-18T07:30:31.822Z
   - name: template
     description: 產生可直接客製化的單服務骨架，驗證更新合併與框架 example 漂移
     paths:

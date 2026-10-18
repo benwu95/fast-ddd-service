@@ -1,0 +1,22 @@
+features:
+  - feature: background-work
+    modules:
+      - kernel
+    status: active
+  - feature: http-contract
+    modules:
+      - kernel
+    status: active
+  - feature: kernel-foundation
+    modules:
+      - kernel
+    status: active
+  - feature: message-contract
+    modules:
+      - kernel
+    status: active
+  - feature: runtime-foundation
+    modules:
+      - example
+      - kernel
+    status: active

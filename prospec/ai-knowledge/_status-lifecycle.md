@@ -1,0 +1,126 @@
+# Change Status Lifecycle
+
+> Canonical definition of the `status` field in a prospec change's `metadata.yaml`
+> (`.prospec/changes/{name}/metadata.yaml`). All prospec skills MUST follow this — do not
+> introduce statuses or transitions outside this file.
+>
+> **Executable copy**: `prospec status` computes current/next station and blocking gates from these rules, and lists each change's unresolved `quality_log` WARNs under `warn:`.
+
+## States and transitions
+
+```
+story → plan → tasks → implemented → verified → archived
+          ↑ skipped when metadata `scale: quick` (story → tasks)
+  prospec-promote-backfill ──────────↗ enters at implemented (metadata `scale: backfill`; brownfield code pre-exists)
+```
+
+| From | To | Owning skill | Gate / precondition |
+|------|----|--------------|---------------------|
+| — | `story` | `prospec-new-story` (or `prospec-ff`) | change scaffolding + `proposal.md` created |
+| `story` | `plan` | `prospec-plan` (or `prospec-ff`) | `plan.md` + `delta-spec.md` created |
+| `story` | `tasks` | `prospec-ff` (or `prospec-tasks`) | **quick path**: metadata `scale: quick` (user-confirmed, or machine-assigned by `prospec change auto-draft` from the drift check that triggered the change) — no plan.md/delta-spec.md; spec & knowledge impact re-checked at the `prospec-archive` Entry Gate |
+| `plan` | `tasks` | `prospec-tasks` (or `prospec-ff`) | `tasks.md` created |
+| — | `implemented` | `prospec-promote-backfill` | **backfill path**: metadata `scale: backfill` — formalizes a reviewed `backfill-draft.md` into the light scaffold (proposal + delta-spec + metadata; **no plan/tasks** — records existing code); the brownfield code already exists, so it enters at `implemented` (no story/plan/tasks/implement transitions run) |
+| `tasks` | `implemented` | `prospec-implement` | all `tasks.md` **code-task** checkboxes complete (`[M]`/`[V]` kinds are reminders — see the tasks-format reference) |
+| `implemented` | `verified` | `prospec-verify` | grade **S or A** (no FAIL, ≤ 2 WARN); its machine dimensions (task completion, Knowledge, tests) are adjudicated by `prospec check`, not by the agent |
+| `verified` | `archived` | `prospec-archive` | only `verified` is archivable **and** affected-module Knowledge is synced before final review/tests/verify (S/A prompt confirms validated content; archive Entry Gate remains the backstop) |
+
+| any nonterminal | `abandoned` | `prospec change abandon` | work preservation completes before artifact movement; terminal metadata published last |
+
+## Station order
+
+The stations `prospec status` routes between, in canonical order. Wider than the six statuses: `design` and `promote` own no status transition of their own — design sits between plan and tasks (only when `proposal.md` declares `ui_scope` full/partial), and `promote` is the backfill entry that lands at `implemented`.
+
+`story → plan → design → tasks → promote → implement → review → verify → knowledge-update → archive`
+
+(The periodic `prospec-learn` is not a linear station and is absent from this order.)
+
+## Light-scale artifact matrix
+
+Which artifacts each scale's contract forbids. `prospec change plan` / `prospec change tasks` enforce these restrictions before writing anything.
+
+| Scale | Forbidden artifacts | Why |
+|-------|---------------------|-----|
+| `quick` | `plan.md`, `delta-spec.md` | plan is skipped by contract; impact is re-checked at the archive Entry Gate |
+| `standard` | — | the full forward path applies |
+| `full` | — | the full forward path applies |
+| `backfill` | `plan.md`, `tasks.md` | records existing code — nothing to plan, no work to schedule |
+
+## Gates (why some transitions are conditional)
+
+For knowledge-sync, absent `related_modules` is unknown (`KNOWLEDGE_INPUT_INVALID`); `[]` declares no related modules. Determine scope from the proposal and actual change diff, then use `prospec change related-modules <modules...> --change <name>` or `prospec change related-modules --change <name> --no-related-modules`. Explicit scope leaves independent REQ classification, module-map validation and affected-module unions intact.
+
+- **`prospec-ff`** fast-forwards `story → plan → tasks` in one pass (`scale: quick`: `story → tasks`, plan skipped). Its own `status` transition stops at `tasks`; **cascading mode** then reloads each downstream station's Skill in turn — `implement → review → verify → knowledge-update` — each running its own gate and any `status` transition it owns (`implement` → `implemented`, `verify` → `verified`), halting at Tastemaker sign-off (Verify grade S/A) without auto-committing or archiving — and, when the plan sign-off pause applies, also after plan (it does not generate tasks until the human signs off). Its Story-stage INVEST check is advisory (recorded via `prospec change log`, never a pause), and its Phase 3/4 enter the `prospec-plan` / `prospec-tasks` station skills rather than keeping a flow of their own.
+- **`prospec-plan` / `prospec-tasks`** own the `plan` / `tasks` transitions, and their verifier verdicts have a machine sink: `prospec change log --skill <station> --verifier-report <file>` validates the report against the rubric-owned schema (`PASS` | `WARN` | `FLAWS`) and records `FLAWS` as `result: FAIL`. Each sink entry is stamped `verifier_verdict`, and `prospec status` reads stamped entries as verifier results: a stamped `FLAWS` routes the station back to itself (`PLAN_VERIFIER_FAILED` / `TASKS_VERIFIER_FAILED`) until a later `PASS` or `WARN` supersedes it; a Break-Glass grant authorizes a bounded retry and never substitutes for a verifier verdict — the station's own unstamped Exit Gate WARN or FAIL is never read as a verifier result and never hides one. Consecutive verifier `FAIL` results are bounded by `.prospec.yaml` `workflow.max_station_retries` (default 3); upon reaching the bound, `prospec status` routes to `next: null` with `code: ESCALATE_TO_HUMAN` to halt the loop for human intervention. **Plan sign-off pause**: `PROSPEC_PAUSE_AT` decides alone for a run when set (even empty; empty or `none` = no pause, `none` being the form Windows shells can pass; an invalid value makes `prospec status` exit non-zero); unset, a verified `ai-proposed` Premise pauses at plan by default, and `.prospec.yaml` `workflow.pause_at` including `plan` pauses the rest (an unreadable or unparseable `.prospec.yaml` is assumed to pause, with the reason printed). A paused `standard` or `full` change at `plan` with no verifier result — or whose plan.md/delta-spec.md changed after the verifier report audited it — routes back to plan (`PLAN_VERIFIER_PENDING`); after a PASS/WARN verifier result it routes to `next: null` with `code: AWAITING_HUMAN_PLAN_SIGNOFF` until `prospec change log --skill prospec-plan --signoff <option>` (full: a candidate option; standard: `plan`) records a sign-off positioned after that verifier entry in `quality_log` and bound to the current plan version (a later verifier entry supersedes it). The wait is not a failure: it counts toward no retry bound. Scales without a plan never pause.
+- **`prospec-implement`** sets `implemented` only when every `tasks.md` **code-task** checkbox is done (unchecked `[M]`/`[V]` tasks are reminders, not blockers) **and** the change carries a fresh green `test_attempt` — the latest attempt passed with exit 0, linked to its `test_provenance`, against the current snapshot — `prospec change status implemented` **refuses** otherwise (missing, stale, running or failing evidence; remediation `prospec check --record-tests --change <name>`), distinguishing "implemented, awaiting verify" from "tasks planned". Two explicit exemptions advance with a `tests: not-adjudicated` WARN under `quality_log` producer `prospec-test-gate` (deduplicated per entrance and reason): no resolvable test command, and a proven backfill (`backfill-draft.md` present); a known non-zero failure is never exempt, and `scale` alone buys nothing. The gate is independent of `tasks.md` — a checkbox-only completion never certifies tests.
+- **`prospec-verify`** sets `verified` ONLY at grade S/A; `prospec verify record` owns the current assessment and refusal/remediation for required review evidence. Grade B/C/D leaves `status` unchanged — status never regresses, so an already-`verified` change re-entering after a post-verify edit stays `verified`. `status` does not record the new grade, but `metadata-completeness` does: for a `verified` change it reads only the LATEST `prospec-verify` entry, so a B/C/D re-verify turns it red until a fresh S/A is earned (an `archived` change keeps the any-entry reading, so stable history cannot flip). The report and that check, not the status, say the change is not archivable — and so does `prospec status`: a `verified` change whose latest grade is B/C/D is routed back to `verify` (`VERIFY_GRADE_BELOW_BAR`), never to archive. Fix the WARN/FAIL items and re-run until S/A. Consecutive below-bar grades are bounded by `.prospec.yaml` `workflow.max_station_retries` (default 3); upon reaching the bound, `prospec status` routes to `next: null` with `code: ESCALATE_TO_HUMAN` to halt the loop for human intervention. Its change-scoped machine dimensions (task completion, tests) are adjudicated from `prospec check`'s report **for this change alone** (a sibling change's findings never grade them; a change the engine did not enumerate is `not-adjudicated`), the Knowledge dimension stays repository-wide, its judgment dimensions in fresh context; an unavailable engine yields `not-adjudicated` (S unreachable, A attainable). Division of labour: verify's Key Difference section.
+- **`prospec-archive`** archives ONLY `verified` changes; any earlier status is refused (verify to S/A first). Its Entry Gate is enforced by `prospec archive` itself, which **refuses** on a `metadata-completeness` FAIL, on any of the three provenance checks FAILing (see Provenance audit scope), or until affected-module Knowledge is synced — the **backstop** for synchronization completed before final review/tests/verify (`--allow-incomplete` exempts the completeness condition only, for a pre-schema record) — then archive sets `archived`. Every gate condition is adjudicated for the **target change alone** (using the check's scope and enumerated `subjects`): a sibling change's missing review or tests never refuse it, a target the engine did not enumerate is refused as unprovable (`CHECK_UNPROVABLE`), and a proven backfill's absent `tasks.md` is not applicable. What stays shared is the whole-tree digest — a sibling's code edit still stales this change's evidence.
+- **`prospec-promote-backfill`** is the **backfill entry point**: it formalizes a reviewed `backfill-draft.md` into a light scaffold (proposal + delta-spec + metadata — `backfill` is a light scale like `quick`, no plan/tasks) and sets `status: implemented` directly (the brownfield code already exists). Under `scale: backfill`, `prospec-verify` grades **spec-fidelity** (every delta-spec REQ's `file:line` must resolve) and `prospec-archive` syncs the modules `prospec knowledge update --change` reports ∪ `metadata.related_modules`. A backfill change that has **not yet reached `implemented`** has an unfinished promotion: `prospec status` routes it to the `promote` station (`prospec-promote-backfill`), never to plan or tasks.
+
+## Sourced premise admission
+
+New scaffolds declare `premise_version: 1` and a pending Premise in proposal.md. For active standard/full changes, the shared structural assessment routes blocked premises to `explore` with `PREMISE_INCOMPLETE`, after pending escalation decisions. `explore` is a route target, not a linear station or metadata status; completing the premise restores the existing route. Archived and abandoned records remain terminal.
+
+`validate proposal <change>` shares the assessment with status and the plan/tasks, forward status, verify-record and archive writers; refusal precedes their first write and inputs are rechecked. Changing a post-story scale to standard/full checks the target scale; story can change scale before authoring. Equal status/scale remains a no-op. After the retry linkage check below, quick/backfill are exempt; absent version means legacy with a visible limitation, while missing metadata, unknown versions and unreadable inputs refuse. Evidence truth is not checked. Explore hands its findings to new-story, which edits the same proposal and preserves scenarios/status; changed scenarios use the existing amendment path.
+
+## Worktree history
+
+`prospec history paths --json` reports named roots and diagnostics. Active changes, config and spec/Knowledge writes stay source-local; complete terminal bundles use the corresponding main worktree project's `.prospec/archive/` and `.prospec/abandoned/`, independent of `base_dir` and branch names. Missing main projects, unsafe topology and writer conflicts refuse without local fallback. Use `prospec history import --from <project-root> --dry-run` for legacy linked-local bundles; import preserves sources and identities, refuses conflicting or incomplete entries, and never restores work. Archive summary edits and harvest use returned `archivePath`; finalize in the original source with `--bundle <archiveIdentity>` before removing that worktree. Retention is not backup of the main repository or Git objects.
+
+## Abandoned attempts
+
+`prospec change abandon <name> --reason <text> [--overturned <field>]` owns the `abandoned` terminal branch from any nonterminal status. It saves project-scoped staged/unstaged patches and changed work bytes with the original artifacts, then stages terminal metadata and verifies publication at the first available `.prospec/abandoned/YYYY-MM-DD-name` (`-2`, `-3`, … for same-day repeats), under the corresponding main worktree project. Source cleanup follows verified publication; use the returned `archiveDir`. The work tree is not restored; `preservedFileCount` counts captured manifest entries, excluding gitlink pins, not live dirty files. Restoration requires a human decision using preservation data and version control; agents reuse explicit authorization already given. No tracker write is performed. Unsupported or unreadable inputs refuse; partial publication reports source, staging, final and external operation paths for manual reconciliation; never auto-unlock. An incomplete operation blocks its active source and is not successful history.
+
+`status` separates completed abandoned history from active routes; history alone leaves the project clean. Successful archive/finalize and review-yield exclude abandoned and incomplete entries. A new Story writes `retry_of` links to creation-time same-issue history and reports prior reasons; all scales require substantive Premise `retry_difference` before advancing. Quick/backfill accept a difference-only mapping. Legacy absent linkage stays readable; changed or unreadable linked records refuse. These are structural gates, not a guarantee that the retry succeeds.
+
+## Stations without a status transition
+
+Some workflow stations participate in the SDD order but own **no** `status` transition — they operate on the working tree and leave `status` to the stations above. Resume logic must place them by workflow order, not by `status`:
+
+- **`prospec-design`** — engages **only when `proposal.md` has `ui_scope != none`**; sits **between `plan` and `tasks`** (it consumes the proposal/plan and produces `design-spec.md`/`interaction-spec.md` for tasks to decompose). For a backend/CLI change (`ui_scope: none`) it does not run at all, and `prospec-verify`'s design dimension (6) is `not-applicable` — the lifecycle is identical to a change that never invoked design. Under `scale: quick` the router does not suggest design (quick skips `plan`); run `prospec-design` manually.
+- **`prospec-review`** — sits **between `implemented` and `verified`** (adversarial review before verify; the review/verify division of labour is stated once, in `prospec-verify`'s Key Difference section); records `review_provenance` but does not change `status`. Every `prospec review merge` requires the same fresh green `test_attempt` (or the same explicit `tests: not-adjudicated` exemptions) before merging findings: a test refusal exits non-zero with the remediation, and the third distinct failed attempt it observes trips `persistent_test_failure` (`ESCALATE_TO_HUMAN`). It also re-runs **after** `verified` when a post-verify edit staled that baseline — owning no status, it needs no transition to be re-enterable, and its Entry Gate status item is a floor.
+- **`prospec-knowledge-update`** — sits **between `verify` and `archive`** (Recipe-First sync of affected-module READMEs and `module-map.yaml` `last_verified` before feature commit and archiving; owns no status transition — status remains `verified`). A knowledge-sync gap it cannot repair — an absent scope declaration, a non-canonical REQ id, an unreadable `module-map.yaml`, a `related_modules` name the map does not register and no ADDED REQ introduces as a new module — routes `verified` to `next: null` with `code: KNOWLEDGE_INPUT_INVALID` instead, each reason naming its repair.
+- **`prospec-learn`** — periodic; promotes lessons, owns no `status`.
+
+## What each gate checks (artifact ownership)
+
+Different derived artifacts have different rightful update times — gates are scoped accordingly:
+
+- **AI Knowledge** (module READMEs) tracks current code; updated by `prospec-knowledge-update` anytime. `prospec-verify` adopts the repository-wide `knowledge-health` verdict, including the verified change's lag (freshness and coverage). Sync and stamp affected Knowledge before final review/tests/verify; the S/A commit prompt confirms those validated inputs. Content-equivalent commits preserve provenance; before re-verifying a commit, check Knowledge freshness separately and renew validation after any re-stamp. The `prospec-archive` Entry Gate remains the **backstop** that refuses unsynced affected-module Knowledge.
+- **Feature Specs** (`specs/features/`) describe *graduated* capabilities, updated **only** by `prospec-archive` (Phase 3.5 graduation). A spec not yet reflecting an un-archived change is the normal pre-archive state — so `prospec-verify` **does NOT gate on Feature Spec freshness**, keeping verify (gate) and archive (sole spec writer) from deadlocking.
+
+## Provenance audit scope
+
+Which statuses `review-provenance`, `test-provenance` and `delta-spec-provenance` audit. All three gates audit the same statuses below.
+
+| Status | Audited | Why |
+|--------|---------|-----|
+| `story` | No | review is not due — no baseline to be stale against |
+| `plan` | No | as above |
+| `tasks` | No | as above |
+| `implemented` | Yes | review and the test run precede verify |
+| `verified` | Yes | S/A ends neither the audit nor the need to re-review — code edited afterwards would graduate requirements no review saw |
+| `archived` | No | unreachable rather than exempt: the bundle has left `.prospec/changes/`, so no collector enumerates it |
+| `abandoned` | No | terminal attempt retained separately from successful workflow provenance |
+
+Review and default test evidence identity is `snapshot-v2` / `repository-inputs-v2`: final tracked and non-ignored untracked
+file content, mode and symlink semantics; HEAD and staging are diagnostic only. Complete
+Knowledge/count/generated-asset sync before final review → tests → verify. Equivalent commit or
+amend preserves evidence. Legacy records need one real revalidation. Test attempts certify only
+provable equal before/after inputs with exit 0. Verify/archive read current workflow facts and
+recheck their observations before writing; saved reports are display artifacts, never gate authority.
+Opt-in `test_evidence.exclude_knowledge: true` permits certified test reuse with compatible effective
+inputs; review and verification-context snapshots still include Knowledge. A test reuse does not
+waive Knowledge checks, document review or project-defined pre-merge CI.
+
+## Rules
+
+- The skill that owns a transition MUST update `metadata.yaml` `status` when it completes its phase.
+- No skill may skip ahead (e.g. `tasks → verified` without `implemented`, or archiving a non-`verified` change). The only legal skip is `story → tasks` under a `scale: quick` — confirmed by the user, or assigned by `prospec change auto-draft` from the drift check it drafted for. Separately, `prospec-promote-backfill` is a lifecycle **entry** (not a skip): it enters at `implemented` under metadata `scale: backfill` (the brownfield code it records already exists).
+- These six are the only valid statuses. Adding one requires updating this file **and** every consuming skill. (`scale: backfill` is a metadata **scale** value, not a new status — it routes verify/archive, like `scale: quick`.)
+
+## Persistent Escalation Decisions
+
+`quality_log` is the lifetime ledger for events, resolutions, explicit human grants and consumption. Status and every sink use the resolved retry bound. Repeated pending events (ordinal ≥ 2) offer only re-scope, abandon and break-glass, recommending re-scope. Only a composed WARN with a nonempty `Manual override:` reason grants one new attempt for that event and station; report warnings and legacy unbound markers grant nothing. Accepted replay consumes no grant; resolution expires unused grants. Tests remain independent.
+
+Review persists artifact then metadata; verify persists metadata then evidence. Accepted receipts and grant consumption share one metadata write. Persistent-test refusal persists the event, rechecks live inputs and review bytes, then splices metrics; a failed event write changes no metrics. Typed partial outcomes distinguish persisted history from an unpersisted observation. Status stays read-only; verify and archive retain override reasons and usage after later PASS.

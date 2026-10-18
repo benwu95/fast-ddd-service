@@ -1,0 +1,47 @@
+modules:
+  - name: example
+    description: 可執行的 billing 參考服務，組裝 HTTP、MQ、task 與 cron 三種程序
+    paths:
+      - example/**
+    keywords:
+      - Invoice
+      - InvoiceController
+      - billing
+      - bootstrap
+      - wiring
+      - consumer
+      - task_worker
+    aliases:
+      - 參考服務
+      - 發票
+      - 組裝
+    rationale: 獨立 workspace member，示範服務如何使用 kernel 實作單一 bounded context
+    relationships:
+      depends_on:
+        - kernel
+      used_by: []
+    last_verified: 2026-10-18T00:09:40.089Z
+  - name: kernel
+    description: 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools
+    paths:
+      - kernel/**
+    keywords:
+      - fast_ddd
+      - fast_ddd_adapter
+      - fast_ddd_port
+      - fast_ddd_devtools
+      - SessionProvider
+      - RepositoryBase
+      - MessageModel
+      - TaskRegistry
+    aliases:
+      - 共用核心
+      - 交易
+      - 租戶隔離
+      - 訊息契約
+    rationale: 單一發佈套件集中處理跨服務基礎行為，四個 Python package 由 import contracts 分層
+    relationships:
+      depends_on: []
+      used_by:
+        - example
+    last_verified: 2026-10-18T00:09:40.089Z

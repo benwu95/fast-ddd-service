@@ -3,8 +3,9 @@ project:
   name: fast-ddd-service
 tech_stack:
   language: python
-  package_manager: poetry
-  source: auto-detected
+  package_manager: uv
+  test_command: make check
+  source: config
 paths:
   base_dir: prospec
 artifact_language: Traditional Chinese (Taiwan)

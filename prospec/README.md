@@ -1,0 +1,33 @@
+# Prospec
+
+This `prospec/` directory holds the **Prospec** working files for this project — the project Constitution, the AI Knowledge base, and change specifications that drive a Spec-Driven Development (SDD) workflow. If you are new to this project, this file explains what Prospec is and where to read more.
+
+## What is Prospec?
+
+Prospec is a **CLI-first Spec-Driven Development (SDD) toolkit** for AI coding agents. Day-to-day work runs through host-aware **Skills inside your AI agent** (Claude Code, Antigravity, Copilot, Codex), and every deterministic operation those Skills perform is executed by the required **`prospec` CLI**. The payoff: the agent follows a consistent `story → plan → tasks → implement → review → verify → archive` workflow, grounded in structured, version-controlled project knowledge.
+
+Three pieces work together:
+
+- **Skills** run the workflow inside your agent — the day-to-day surface.
+- **AI Knowledge** is progressive, version-controlled project memory (modules, specs, lessons) the Skills read and grow with each change.
+- **CLI (`prospec`)** is a required standalone executable in the runtime loop — every deterministic operation the Skills need (scaffolds, lifecycle transitions, structured records, drift checks, grading, archive sync) runs as reproducible code.
+
+## Installation
+
+The `prospec` CLI is a standalone executable required for the deterministic workflow steps. Install it via the one-click installer:
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/benwu95/prospec/main/install.sh | bash
+```
+
+**Windows:**
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/benwu95/prospec/main/install.ps1 | iex"
+```
+
+## Full documentation
+
+This is a short in-project summary. For the complete guide — quickstart, CLI commands, the full list of Skills, and how the AI Knowledge base is structured — see the Prospec repository:
+
+https://github.com/benwu95/prospec

@@ -16,7 +16,7 @@
 
 ## Requirements
 
-Quick spec-impact 判定：無 spec impact。相對 d03c75d 的實際 diff 僅改 `kernel/tests/port/test_subscriber.py`、kernel README 與 freshness stamp；未變更 production code、公開 API、schema 或 wire contract。既有 `message-contract.md:34–38` 的 REQ-KERNEL-006 保證逐事件 organization／payload 與隔離，沒有跨訊息 FIFO handler 承諾。本次移除不成立的位置式測試假設，保留既有 contract 驗證；不新增、修改或移除 Feature Spec REQ，略過 graduation。
+Quick spec-impact 判定：無 spec impact。相對 d03c75d，review／verify 時的實作 diff 僅改 `kernel/tests/port/test_subscriber.py`、kernel README 與 freshness stamp；後續歸檔／同步另產生本摘要、raw scan 與獨立 lessons ledger 變更。未變更 production code、公開 API、schema 或 wire contract。既有 `message-contract.md:34–38` 的 REQ-KERNEL-006 保證逐事件 organization／payload 與隔離，沒有跨訊息 FIFO handler 承諾。本次移除不成立的位置式測試假設，保留既有 contract 驗證；不新增、修改或移除 Feature Spec REQ，略過 graduation。
 
 ## Completion
 

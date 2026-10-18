@@ -12,6 +12,7 @@
 | `kernel/src/fast_ddd_port/` | HTTP、MQ 與 task 入口 |
 | `kernel/src/fast_ddd_devtools/` | 套件與錯誤目錄工具 |
 | `kernel/Makefile` | 品質檢查入口 |
+| `kernel/tests/test_distribution.py` | 非 editable wheel 與型別／migration resources |
 
 ## Public API
 - `AggregateRoot`、`DomainEvent` — domain 狀態與事件。
@@ -20,13 +21,14 @@
 
 ## Dependencies
 **Depends on:** 無內部 module；adapter 使用 PostgreSQL／RabbitMQ，port 使用 FastAPI／FastStream／PgQueuer。
-**Used by:** `example`。
+**Used by:** `example` 與 `template` 產生的獨立服務。
 
 ## Modification Guide
 1. 修改 domain primitive → [Core](./core.md)；先確認純 core 的 import 邊界。
 2. 修改交易與儲存 → [Adapter](./adapter.md)；同步檢查入口交易生命週期。
 3. 修改 wire contract → [Port](./port.md)；比對 producer 與 consumer。
 4. 修改開發檢查 → [Devtools](./devtools.md)；執行 kernel 與 example 的 `make check`。
+5. 改分發 → pyproject／wheel tests → Git／path 與 Linux image；四個 py.typed、正式 migrations 必須可讀，test-only branch 不進 wheel。
 
 ## Ripple Effects
 - 公開型別與序列化變更影響 `example` 的 domain、controller、schema 與資料庫。
@@ -34,6 +36,7 @@
 ## Pitfalls
 - 分層為 port → adapter → core；runtime packages 不可依賴 devtools。
 - 共用設定由 composition root 注入；不可讓 core 直接讀 settings。
+- MQ contract 測試以 event ID 對照 organization 與 payload，另驗數量與完整 ID 集合；handler 觀測順序不可當成發送順序。
 
 ## Sub-Modules
 - [Core](./core.md) — domain、context 與集合操作。

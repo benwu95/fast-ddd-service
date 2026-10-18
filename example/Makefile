@@ -26,11 +26,9 @@ test:
 	$(UV) coverage run -m pytest
 	$(UV) coverage report
 
-# make migration name="add invoice due date"   (needs DATABASE_URL)
 migration:
 	$(UV) fast-ddd-alembic revision --autogenerate --head service@head \
 		--version-path alembic/versions -m "$(name)"
 
 error-catalog:
-	# app.wiring imports every context, so every DomainError and aggregate is registered.
 	PYTHONPATH=. $(UV) fast-ddd-error-catalog app.wiring --output error-catalog.json

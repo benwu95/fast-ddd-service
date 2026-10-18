@@ -1,0 +1,19 @@
+line-length = 100
+target-version = "py313"
+src = [".", "tests"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "DTZ", "TID", "ASYNC", "PT", "RET", "ARG", "N"]
+# Domain errors are named after the business rule they reject (e.g. InvoiceAlreadyVoided).
+ignore = ["N818"]
+
+[lint.isort]
+known-first-party = ["app", "scripts", "tests"]
+# The local alembic/ directory would otherwise make the library look first-party.
+known-third-party = ["alembic"]
+
+[lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Use pendulum.now('UTC')."
+"datetime.datetime.utcnow".msg = "Use pendulum.now('UTC')."
+"datetime.datetime.today".msg = "Use pendulum.now('UTC')."
+"datetime.date.today".msg = "Use pendulum.today('UTC')."

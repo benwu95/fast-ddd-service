@@ -461,16 +461,24 @@ def test_integration_message_preserves_typed_fields_before_serializing() -> None
     }
 
 
+@pytest.mark.parametrize("global_first", [False, True])
 async def test_real_producer_consumer_contract_accepts_unknown_and_global_fields(
     amqp_url: str,
     session_factory: async_sessionmaker[AsyncSession],
+    global_first: bool,
 ) -> None:
     rabbit = create_broker(amqp_url)
     seen: list[tuple[Envelope, DeliveryData]] = []
+    global_observed = asyncio.Event()
     queue_name = f"kernel-test.contract-{uuid4()}"
 
     async def handle(envelope: Envelope, data: DeliveryData) -> None:
+        if global_first and envelope.organization_id is not None:
+            async with asyncio.timeout(5):
+                await global_observed.wait()
         seen.append((envelope, data))
+        if envelope.organization_id is None:
+            global_observed.set()
 
     subscribe(
         rabbit,
@@ -494,8 +502,12 @@ async def test_real_producer_consumer_contract_accepts_unknown_and_global_fields
             data["futurePayloadField"] = "ignored"
             await publisher.publish(message)
         await eventually(lambda: len(seen) == 2)
-        assert [item[0].organization_id for item in seen] == [e.organization_id for e in events]
-        for (_, data), event in zip(seen, events, strict=True):
+        assert len(seen) == len(events)
+        seen_by_id = {envelope.event_id: (envelope, data) for envelope, data in seen}
+        assert set(seen_by_id) == {event.event_id for event in events}
+        for event in events:
+            envelope, data = seen_by_id[event.event_id]
+            assert envelope.organization_id == event.organization_id
             assert data.customer_id == event.customer_id
             assert data.shipping_address.postal_code == "100"
             assert data.custom_labels == {"do_not_change": "yes"}

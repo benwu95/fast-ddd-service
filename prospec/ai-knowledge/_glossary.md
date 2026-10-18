@@ -6,6 +6,9 @@
 | :--- | :--- | :--- |
 | 共用核心 | kernel | `kernel` workspace member；可安裝套件包含 core、adapter、port、devtools 四個 Python package。 |
 | 參考服務 | example | `example` workspace member；以 billing bounded context 示範三種程序的服務組裝。 |
+| 服務骨架 | template / scaffold | Copier 產生的單服務 repo；外層程式、工具與測試由服務直接修改，可自行選擇合併上游更新。 |
+| 初始化檔 | initialization-only | 存在時不被生成覆寫；刪除後可能按 template 與持久化 baseline 答案重建的服務擁有檔案。 |
+| 骨架漂移 | template drift | 僅框架 template／example 配對的一致性檢查；不限制下游客製化服務。 |
 | 發票 | Invoice | Billing aggregate，含 customer、lines、狀態、版本與事件；可開立、修改、作廢或刪除。 |
 | 值物件 | Value Object | 以 frozen dataclass 表達的業務資料，如 Customer、InvoiceLine、InvoiceContent。 |
 | 工作單元 | Unit of Work / UoW | 一次入口執行的身分、organization、trace 與交易脈絡；由 wrappers 建立並在結束復原。 |

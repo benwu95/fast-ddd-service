@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.crt)",
+      "Read(**/*.cer)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Bash(env)",
+      "Bash(env *)",
+      "Bash(printenv)",
+      "Bash(printenv *)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "fast-ddd": {
+      "source": {
+        "source": "github",
+        "repo": "benwu95/fast-ddd-service"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "fast-ddd@fast-ddd": true
+  }
+}

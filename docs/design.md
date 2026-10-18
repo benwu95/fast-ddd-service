@@ -5,8 +5,9 @@
 
 ## 1. 目的與範圍
 
-讓我（單一使用者）能用一套**已驗證過的 DDD + Event-Driven 架構**，透過 AI 快速建立後端服務。
+提供讓 agent 快速建立後端專案的框架，以**已驗證過的 DDD + Event-Driven 架構**作為可直接使用的起點。kernel 提供 DDD 共用核心與既有整合機制；外層參考服務與產生的骨架供各專案自行修改，不限定只能透過預設 hooks 或 copier answers 客製化。
 
+- 以 microservice 為前提，每個產生的後端服務各自擁有獨立 repo、相依版本與部署生命週期；不支援在同一個服務 repo 內管理多個後端服務。同一服務的 API、consumer、worker 是不同執行角色，不是不同服務。
 - 交付形式是可經由 Claude Code plugin marketplace 安裝的 skill，搭配一份可執行的參考服務、共用 kernel 與服務骨架 template。
 - 原 repo 的 `copy_tool.py`（複製佔位檔再手動改名填寫）由 skill 取代；固定的骨架檔案由 copier 產生。
 - 範圍內的架構改動只有以下幾類，其餘一律忠實搬移：
@@ -23,6 +24,7 @@
 4. **I/O 以集合為單位，業務規則以 aggregate 為單位**：見第 8 節。
 5. **共用核心不讓 AI 修改**：`ddd_base` 這類共用程式碼放進外部相依（kernel），不放在服務的原始碼裡，避免各服務各自修改後逐漸分歧。
 6. **預設只產生 CRUD，其他操作由需求決定**：見第 14 節。
+7. **外層範例可自行修改**：bootstrap、entry points、基礎設施組裝、工具設定與測試皆是可用的起點，產生後由服務 repo 維護；不因可重用就把整套外層 lifecycle 納入 kernel。template 更新採可檢視的合併流程，不能以維持範本一致性限制下游客製化。kernel 既有 adapter／port 能力不因這項原則移除。
 
 ## 3. Repo 結構與交付物
 
@@ -46,6 +48,7 @@ fast-ddd-service/
 ```
 
 - **plugin source 用 `"./"`**：整個 repo 就是 plugin，skill 直接用 `${CLAUDE_PLUGIN_ROOT}/example/...` 引用參考服務，不需要同步機制。使用者只有我一個人，多複製一些檔案沒有影響。
+- **開發 repo 與服務 repo 的邊界**：此 repo 集中維護 kernel、template 與單一參考服務 example；workspace 用於框架本身的開發與驗收，不是多個後端服務共置的交付模式。各服務 repo 分別安裝版本化 kernel，共用程式碼不代表共用執行中的 Runtime、connection 或 process。
 - **kernel 用 git tag 相依**：`fast-ddd-kernel @ git+https://github.com/benwu95/fast-ddd-service@vX.Y.Z#subdirectory=kernel`，不發布到 PyPI。
 - **kernel 來源與執行環境**：copier template 提供 `kernel_source`（`git`／`path`／`workspace`，預設 `git`）。一般服務用上述 git tag；本機整合測試用 `path`，由 `kernel_path` 指定 kernel 位置（預設 `../kernel`）。Phase 1 的 `example/` 實際使用 uv workspace，Phase 2 保留 `{ workspace = true }`，並在 `.copier-answers.yml` 記錄 `workspace`；此模式供 repo 內的參考服務使用。standalone 服務擁有自己的 `.venv` 與 `uv.lock`，不得複製 repo 根目錄的 workspace lock；Pyright 的 venv 位置依模式渲染，workspace 使用父目錄，standalone 使用服務目錄。三種來源模式都必須有明確的相依宣告與驗收。
 - **git tag 的版本號**：template 中的 kernel 版本是一個明確的常數（`copier.yml` 的 `kernel_version`，發布時和 plugin.json 的 `version` 一起調整），不使用 copier 的 `_commit` 變數。`_commit` 是 template 的 git describe 字串（例如 `v0.1.0-3-ga9258e4`），每個 commit 都不同，也不是有效的 kernel 版本；任何骨架檔案都不可以渲染 `{{ _commit }}`。
@@ -53,6 +56,8 @@ fast-ddd-service/
 - **自動啟用**：template 產生的服務在 `.claude/settings.json` 寫入 `extraKnownMarketplaces` 和 `enabledPlugins`（`fast-ddd@<marketplace>`）。plugin source 是 relative path，所以 trust 這個 repo 後就會自動載入。
 - **機密檔案的保護**：同一份 `.claude/settings.json` 的 `permissions.deny` 禁止讀取 `.env*`、`*.pem`、`*.key`、憑證檔案，以及執行 `env`、`printenv` 這類會輸出環境變數的指令。設定和機密一律從環境變數讀取，不寫進任何會被 commit 的檔案（包括 pytest 設定）。
 - **template 和參考服務的關係**：Phase 1 先手寫 `example/`；Phase 2 從 `example/` 抽出 template。之後 CI 對 `example/` 執行 `copier recopy --overwrite --defaults --vcs-ref HEAD`（以 `.copier-answers.yml` 的答案、用目前這個 commit 的 template 重新產生骨架檔案），再用 `git diff --exit-code -- example ':(exclude)example/.copier-answers.yml'` 檢查 tracked files，並檢查 `git status --porcelain --untracked-files=all -- example`，確認沒有新增、刪除或修改的骨架檔案。answers 另外做結構化比對，只容許 `_commit` 改變；不能忽略其他答案漂移。`_commit` 必須獨立處理：copier 會把 template 的 commit 寫進 answers，而已 commit 的檔案不可能包含自己所在 commit 的 hash（已實測，copier 9.19）。必須加 `--vcs-ref HEAD`：不指定時 copier 會改用最新的 git tag（`copier recopy --help` 的說明），比對到的是上一次發布的 template。不用 `copier update` 做 drift 檢查：它是三方合併，會保留 `example/` 裡的手動修改，偵測不到骨架檔案被直接改動。完整驗收見第 15.1 節。
+
+框架另以 `scripts/template-ownership.json` 保存歷史受管路徑，補足 recopy 不會刪除舊副本的情況。checker 透過 Copier 空目錄渲染與 skip matcher 取得目前受管集合；新路徑未登錄或 example 留有退役檔案均失敗。維護者以 `make template-ownership` 原子更新歷史聯集，歷史路徑永久保留；一般 CI 不改清單、不刪檔，初始化與業務內容保留，此清單不產生到下游服務。
 - **skill 的開發流程**：發布前，把本機的 repo 路徑加成 marketplace 來源，載入未發布的版本測試；確認後再調整 version、打 tag。
 
 ## 4. Tech stack
@@ -173,13 +178,15 @@ kernel 端（根設定同樣要有 `include_external_packages = True`；實測�
 | 模組 | 內容 | 誰可以 import |
 |---|---|---|
 | `app/settings.py` | 服務自己的設定（由 template 初始化，之後由服務維護）：繼承 kernel 提供的 `KernelSettings`（`fast_ddd_port`，包含 DB、broker、JWT、CORS 等 kernel 需要的設定），保留通用 worker health／shutdown 欄位，再加上服務自己的欄位（例如其他服務的 URL） | port、`app/bootstrap.py`、`app/wiring.py`；core 和 adapter 都不可以（`app.settings` 繼承了 `fast_ddd_port` 的 `KernelSettings`，adapter import 它會間接 import `fast_ddd_port`，違反「`app.adapter` 不得 import `fast_ddd_port`」的 contract，已實測）。adapter 需要的設定值由 `wire_resources(settings)` 或 kernel 的 `configure(...)` 在啟動時傳入。另加 `forbidden`：`app.core`、`app.adapter` 不得 import `app.settings` |
-| `app/bootstrap.py` | 組裝點（template 檔案，各服務不修改）：建立 engine、session factory、FastStream broker、publisher、`EventBus` 實例，注入 kernel（例如 `fast_ddd_adapter.configure(session_factory=..., event_bus=...)`）；設定 OpenTelemetry 和 log；呼叫 `wire_resources(settings)` 和 `wire_events(bus)`。分成兩個函式：`configure_process(settings)` 設定整個 process 的 log 和 OpenTelemetry（每個 process 一次），`build_runtime(settings, role=...)` 建立其餘的元件並回傳 `Runtime`（測試直接用 `build_runtime` 或自行組出 `Runtime`，不碰 process 層級的設定）。`role` 是 `api`／`consumer`／`worker`，組成連線的 `application_name` | 只有 `app/main.py`、`app/consumer.py`、`app/task_worker.py` |
-| `app/wiring.py` | 服務自己的接線（不是 template 檔案），依角色分成五個函式：`wire_resources(settings)` 建立服務自己的基礎設施（例如呼叫其他服務的 HTTP client），存進服務自己的 `app/adapter/resources.py`（有型別的 getter，未設定時報錯，和 kernel 的 `configure` 同樣模式），回傳需要在關閉時釋放的資源，由 FastAPI lifespan／FastStream 的 shutdown 釋放；`wire_events(bus)` 註冊 in-process event handler（`bus.subscribe(EventType, handler)`，兩個 process 都需要）；`wire_http(app)` 註冊 FastAPI router；`wire_consumer(broker, session_factory)` 註冊 FastStream subscriber，回傳需要宣告 DLQ 的 queue 名稱；`wire_tasks(registry)` 註冊背景工作的 handler 和排程（第 11.1 節）。不在 import 時用 decorator 註冊到全域的 `event_bus`（原版的做法），因為 `EventBus` 實例改由 bootstrap 建立 | `app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py` |
+| `app/bootstrap.py` | 組裝點（由 template 提供初始範例，服務可自行修改）：建立 engine、session factory、FastStream broker、publisher、`EventBus` 實例，注入 kernel（例如 `fast_ddd_adapter.configure(session_factory=..., event_bus=...)`）；設定 OpenTelemetry 和 log；呼叫 `wire_resources(settings)` 和 `wire_events(bus)`。分成兩個函式：`configure_process(settings)` 設定整個 process 的 log 和 OpenTelemetry（每個 process 一次），`build_runtime(settings, role=...)` 建立其餘的元件並回傳 `Runtime`（測試直接用 `build_runtime` 或自行組出 `Runtime`，不碰 process 層級的設定）。`role` 是 `api`／`consumer`／`worker`，組成連線的 `application_name` | 只有 `app/main.py`、`app/consumer.py`、`app/task_worker.py` |
+| `app/wiring.py` | 服務自己的接線（由 template 初始化，後續由服務維護），預設依角色分成五個函式：`wire_resources(settings)` 建立服務自己的基礎設施（例如呼叫其他服務的 HTTP client），存進服務自己的 `app/adapter/resources.py`（有型別的 getter，未設定時報錯，和 kernel 的 `configure` 同樣模式），回傳需要在關閉時釋放的資源，由 FastAPI lifespan／FastStream 的 shutdown 釋放；`wire_events(bus)` 註冊 in-process event handler（`bus.subscribe(EventType, handler)`，兩個 process 都需要）；`wire_http(app)` 註冊 FastAPI router；`wire_consumer(broker, session_factory)` 註冊 FastStream subscriber，回傳需要宣告 DLQ 的 queue 名稱；`wire_tasks(registry)` 註冊背景工作的 handler 和排程（第 11.1 節）。不在 import 時用 decorator 註冊到全域的 `event_bus`（原版的做法），因為 `EventBus` 實例改由 bootstrap 建立 | `app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py` |
 | `app/main.py` | template 檔案：`build_app(runtime, verifier)` 建立 FastAPI app（lifespan 中連線 broker、關閉時釋放 `Runtime`）、掛上 kernel 的 middleware、呼叫 `wire_http(app)`；`create_app()` 讀取設定並呼叫 bootstrap，以 `uvicorn --factory app.main:create_app` 啟動 | 進入點，沒有人 import |
 | `app/consumer.py` | template 檔案：`build_consumer(runtime)` 建立 `AsgiFastStream`（`/health/live` 用 FastStream 的 ping 檢查 broker 連線；啟動後宣告各 queue 的 DLQ）、呼叫 `wire_consumer`；`create_app()` 讀取設定並呼叫 bootstrap，以 `faststream run --factory app.consumer:create_app` 啟動 | 進入點，沒有人 import |
 | `app/task_worker.py` | template 檔案：`build_task_worker(runtime, connection)` 建立背景工作的 worker、呼叫 `wire_tasks(registry)`（第 11.1 節）；`main()` 為 PgQueuer 另開一條 asyncpg 連線（LISTEN 用，DSN 由 `database_url` 去掉 `+asyncpg` 而來），收到 SIGTERM／SIGINT 時處理完手上的工作後停止，以 `python -m app.task_worker` 啟動 | 進入點，沒有人 import |
 
 原版的 `app.trace`、`app.logger`、`app.package_instance` 分別由 `fast_ddd.context`、`app/bootstrap.py` 的 log 設定、kernel 的 unit-of-work middleware 取代。
+
+以上組裝方式與五個 wiring 函式是預設範例，不是服務客製化的唯一入口；服務可修改 bootstrap／entry points 及其 lifecycle，並自行調整對應測試。此 repo 維護的 template／example 則持續驗證下述預設行為。
 
 Phase 2 抽取時保留 Phase 1 已驗證的 lifecycle：API／consumer 先完成未連線的同步組裝，成功後才啟動 telemetry；`wire_resources(settings)` 同步建立未連線的服務資源，回傳有型別的 shutdown callbacks。API 以 `AsyncExitStack` 保護 startup／shutdown，consumer 在 lifespan 的 `finally` 關閉 `Runtime`、啟動前重套 logging policy；worker 取得資源或 task 後立即登記清理，保留 health server、失敗傳播與有時限的 signal drain。這些行為須隨 template 測試，不以 recopy 的文字一致性取代。
 
@@ -900,7 +907,7 @@ kernel 用 OpenTelemetry metrics 提供以下指標，服務不需要自己加�
 - pyright strict；排除 `alembic/versions`。kernel 附 `py.typed`。不允許用 `# type: ignore` 繞過檢查：`enableTypeIgnoreComments: false`、`reportUnnecessaryTypeIgnoreComment: error`。
 - ruff（format 和 lint，lint 含 `DTZ`、`TID251`）、import-linter 和 contract 涵蓋檢查（第 6.2 節）、pytest。
 - pytest：`filterwarnings = error`，warning 一律視為錯誤，第三方套件的 warning 以範圍明確的例外排除；需要外部工具的測試在 CI 中不可以被略過（缺少工具時失敗，而不是 skip）。
-- coverage：template 預設 `fail_under = 80`，各服務可以透過 copier answer `coverage_minimum` 調高，合法範圍為 80–100；答案持久化並渲染至 template 擁有的 `.coveragerc`，使 recopy 不會覆蓋合法提高的門檻。設定 `concurrency = greenlet, thread`：SQLAlchemy 的 asyncio 層以 greenlet 切換執行，不設定時 DB await 之後的程式碼不會被記錄（實測 router 和 use case 的程式碼明明有執行，卻顯示未涵蓋）。
+- coverage：template 預設 `fail_under = 80`，各服務可以透過 copier answer `coverage_minimum` 調高，合法範圍為 80–100；答案持久化並渲染至 template 提供、服務可修改的 `.coveragerc`；依答案提高的門檻於 update／隔離 recopy 後保留，直接客製化則走前述合併更新。設定 `concurrency = greenlet, thread`：SQLAlchemy 的 asyncio 層以 greenlet 切換執行，不設定時 DB await 之後的程式碼不會被記錄（實測 router 和 use case 的程式碼明明有執行，卻顯示未涵蓋）。
 - 測試資料庫一律以 Alembic migration 建立（不用 `metadata.create_all`），migration 本身也會被測到；測試之間以 rollback 或 truncate 隔離。
 - **migration 的檢查**：CI 確認 kernel 與服務的 branch 各有一個 head（第 7.2 節），並執行 `fast-ddd-alembic check`，確認 ORM model 沒有尚未產生的 migration。測試自行建立 Alembic `Config` 時呼叫 `add_kernel_versions(config)`，不可只靠 `env.py` 加入 kernel migrations。`env.py` 開啟 `compare_type` 和 `compare_server_default`；migration 檔名加上日期前綴（`file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s`），依檔名就能看出順序。
 - **pre-commit**：template 提供 `.pre-commit-config.yaml`，安裝 `pre-commit` 和 `commit-msg` 兩種 hook：
@@ -978,12 +985,14 @@ Phase 1 已完成 kernel 與 billing 參考服務；目前 `example/` 的品質�
 
 | 歸屬 | 檔案與規則 |
 |---|---|
-| template 擁有 | Dockerfile、`alembic.ini`、`alembic/env.py`、`alembic/script.py.mako`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、`pytest.ini`、`.coveragerc`、`.pre-commit-config.yaml`、Makefile、`.github/workflows/check.yml`、`.gitignore`、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`、`.claude/settings.json`（含第 3 節的 deny 清單），以及通用回歸測試 `tests/runtime/**`。服務不直接修改，透過 copier answers 調整支援的配置；工具設定保持獨立，不移入 `pyproject.toml`。 |
+| template 追蹤更新、服務可修改 | Dockerfile、`alembic.ini`、`alembic/env.py`、`alembic/script.py.mako`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、`pytest.ini`、`.coveragerc`、`.pre-commit-config.yaml`、Makefile、`.github/workflows/check.yml`、`.gitignore`、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`、`.claude/settings.json`（含第 3 節的 deny 清單），以及通用回歸測試 `tests/runtime/**`。產生後可直接客製化，不限於 copier answers；`copier update` 合併上游變更與本地修改，衝突由服務維護者處理，不能靜默覆蓋或視為已完成更新。工具設定預設保持獨立，不移入 `pyproject.toml`。 |
 | 服務擁有、由 template 初始化 | `pyproject.toml`、`app/settings.py`、`app/wiring.py`、`app/adapter/resources.py`、`app/adapter/repository/models.py`、`tests/conftest.py`、`tests/support.py` 與 service branch 的 baseline migration。已存在的檔案透過 `_skip_if_exists` 保留；缺少時可能重新建立，不能將此規則解讀為刪除後也永不產生。baseline 不得在 example 既有 service branch 旁再建立第二個 root。 |
 | 服務擁有、由工具或業務開發產生 | `uv.lock`、後續 `alembic/versions/**`、業務程式碼與業務測試；template 不覆寫。首次 copy 後由服務執行 `uv lock`、`uv sync --frozen`，再執行 `make check`；lock 納入版本控制，不能由 template 複製 workspace lock。 |
 | copier 管理 | `.copier-answers.yml` 記錄來源、template revision 與支援的配置；由 copier 更新，CI 除 `_commit` 外核對所有答案。 |
 
 `pyproject.toml` 由服務維護，因此 `copier update` 不等於 kernel 升級。升級 template 所需的 kernel 版本時，必須提供明確的升級說明，由服務更新相依、重新產生 lock 並通過 `make check`；不得覆蓋服務自行加入的相依。`kernel_version` 仍是第 3 節的明確版本常數，不以 `_commit` 代替。`coverage_minimum` 預設 80，拒絕低於 80 或高於 100 的答案。
+
+此表區分更新方式，不限制服務修改權。下游自行選擇是否及何時採用 template 更新；更新前以 Git 保存客製化，使用 `copier update` 合併，檢查差異及衝突並完成服務驗證後才算成功。`recopy --overwrite` 可能覆掉被追蹤檔案的客製化，只用於框架 repo 的 example 同步與隔離驗收，不作為下游客製化服務的一般升級指令。框架 CI 要求 template／example 一致，不要求下游服務與範本一致。合併與衝突標記沿用 [Copier 官方更新流程](https://copier.readthedocs.io/en/stable/updating/)，不自製合併引擎。
 
 #### 空服務與 migration 契約
 
@@ -1005,8 +1014,8 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 
 1. **standalone copy**：在 repo 外的暫存目錄執行 `copier copy --vcs-ref HEAD`，使用 `kernel_source=path` 與明確的 `kernel_path`；建立自己的 lock／venv，確認不繼承 repo workspace 後通過 `make check`。另在隔離的本機 git fixture 建立測試 tag，以 `kernel_source=git` 驗證帶 `subdirectory=kernel` 的非 editable 安裝，不能只以 path 模式代表 git 模式成功，也不需為測試發布 tag。
 2. **分發與啟動**：確認安裝產物含四個 package 的 `py.typed` 與 kernel migrations；在 PostgreSQL／RabbitMQ 可用的測試環境執行 API、零 subscriber consumer、零 task／cron worker 的 startup／health／shutdown smoke tests，並建置及測試 standalone 容器。若空 registry 有啟動限制，先釐清並調整空服務契約，不以假業務 handler 規避。
-3. **update 與歸屬保護**：以隔離的兩個 template revisions 測試 `copier update`，確認 template 檔案更新、服務相依與 wiring 等修改保留、既有 migrations 不變；提高 coverage 後 update／recopy 仍保留答案與門檻，低於 80 的輸入被拒絕。
-4. **recopy drift**：在乾淨的 CI checkout 對 example 執行第 3 節的 recopy 與完整差異檢查，涵蓋 tracked 與 untracked files 及 answers。以刻意修改 template 擁有檔案、保留服務擁有檔案修改，以及新增 template 檔案但尚未同步 example 的案例，分別證明 drift 會被偵測、服務修改會保留、新檔案不會漏檢。
+3. **update 與客製化保護**：以隔離的兩個 template revisions 測試 `copier update`，直接客製化 bootstrap／entry point、工具設定與通用測試；非衝突修改與上游變更合併後均保留，衝突案例明確留下雙方內容與待解決狀態，不以指令正常返回判定更新成功。服務相依與 wiring 等初始化檔修改、lock 與既有 migrations 不變；提高 coverage 後 update／隔離 recopy 仍保留答案與門檻，低於 80 的輸入被拒絕。
+4. **recopy drift**：僅在框架 repo 的乾淨 CI checkout 對 example 執行第 3 節的 recopy 與完整差異檢查，涵蓋 tracked 與 untracked files 及 answers。以刻意修改 template 追蹤檔案、保留初始化檔案修改，以及新增 template 檔案但尚未同步 example 的案例，分別證明 drift 會被偵測、初始化修改會保留、新檔案不會漏檢；另以來源刪檔後保留舊副本、同步移除副本、歷史清單更新及初始化／業務保留案例驗證 ownership 邊界；不對下游客製化服務套用這項一致性要求。
 5. **Phase 1 regression**：repo 根目錄的 `make check` 全部通過，維持 kernel 與 example 的分層、型別、wire contract、交易與 lifecycle 測試，不以空服務通過取代參考服務驗證。
 
 ## 16. 待決事項

@@ -23,8 +23,8 @@ from app.port.task.billing.invoice_tasks import DailySummaryData
 from app.task_worker import build_task_worker, driver_dsn
 from app.wiring import wire_tasks
 from tests.conftest import Infrastructure
+from tests.runtime.support import settings
 from tests.support import content
-from tests.test_worker_lifecycle import settings
 
 type Factory = async_sessionmaker[AsyncSession]
 

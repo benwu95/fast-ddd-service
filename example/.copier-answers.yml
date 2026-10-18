@@ -1,0 +1,9 @@
+_commit: 31a0e75
+_src_path: ..
+coverage_minimum: 80
+initialize_service_baseline: false
+kernel_git_url: https://github.com/benwu95/fast-ddd-service
+kernel_path: ../kernel
+kernel_source: workspace
+kernel_version: 0.1.0
+service_name: example-service

@@ -23,11 +23,14 @@ _No dependencies detected_
 ## Config Files
 
 - `Makefile`
+- `example/Dockerfile`
 - `example/Makefile`
 - `example/pyproject.toml`
 - `kernel/Makefile`
 - `kernel/pyproject.toml`
 - `pyproject.toml`
+- `template/Dockerfile`
+- `template/Makefile`
 
 ## Directory Tree
 
@@ -56,10 +59,13 @@ example/
         billing/
       task/
         billing/
+  docs/
   tests/
     adapter/
     core/
     port/
+    runtime/
+    template/
     typing_contracts/
 kernel/
   src/
@@ -75,6 +81,27 @@ kernel/
     migrations/
       versions/
     port/
+prospec/
+  ai-knowledge/
+    modules/
+      example/
+      kernel/
+      template/
+  specs/
+    _archived-history/
+    features/
+scripts/
+template/
+  alembic/
+    versions/
+  app/
+    adapter/
+      repository/
+    core/
+    port/
+  docs/
+  tests/
+    runtime/
 ```
 
 ## Directories Without Source Files
@@ -93,12 +120,15 @@ kernel/
 > non-source ancestor, and both lists are ordered by file volume — a cap keeps the biggest, not the
 > alphabetically first.
 
+- `prospec/` — 28 files: `.md`, `.yaml`
+- `docs/` — 2 files: `.md`
 - `example/tests/typing_contracts/` — 2 files: `.txt`
-- `docs/` — 1 file: `.md`
+- `example/docs/` — 1 file: `.md`
+- `template/docs/` — 1 file: `.md`
 
 ## File Stats
 
 | Metric | Value |
 |--------|-------|
-| Total files | 168 |
+| Total files | 267 |
 | Scan depth | 10 |

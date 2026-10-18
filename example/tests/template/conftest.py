@@ -1,6 +1,8 @@
+import os
 from collections.abc import Generator
 from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from copier import run_copy
@@ -11,6 +13,22 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from tests.template.runtime_support import RuntimeInfrastructure
 from tests.template.support import PYTHON_VERSION, ROOT, git, run, serve_git, snapshot_repository
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_git_auto_maintenance() -> Generator[None]:
+    # Copier's own git commits in temporary repositories otherwise spawn detached
+    # maintenance that can write packs while copier deletes those directories.
+    count = int(os.environ.get("GIT_CONFIG_COUNT", "0"))
+    config = {
+        "GIT_CONFIG_COUNT": str(count + 2),
+        f"GIT_CONFIG_KEY_{count}": "gc.auto",
+        f"GIT_CONFIG_VALUE_{count}": "0",
+        f"GIT_CONFIG_KEY_{count + 1}": "maintenance.auto",
+        f"GIT_CONFIG_VALUE_{count + 1}": "false",
+    }
+    with patch.dict(os.environ, config):
+        yield
 
 
 @pytest.fixture(scope="session")

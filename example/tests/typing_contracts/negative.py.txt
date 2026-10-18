@@ -1,0 +1,37 @@
+from fast_ddd.batch import BatchItem, apply_batch, create_batch
+from fast_ddd.context import User
+
+from app.adapter.controller.billing.invoice_controller import InvoiceController
+from app.adapter.repository.billing.invoice_repository import InvoiceRepository
+from app.core.billing.domain.invoice import CustomerId, Invoice, InvoiceId
+from app.core.billing.domain.repository import InvoiceRepositoryInterface
+from app.core.billing.use_case.invoice_use_case import InvoiceUseCase
+
+
+def make_invoice(invoice_id: InvoiceId, _reason: str) -> Invoice:
+    raise NotImplementedError(invoice_id)
+
+
+def void_invoice(_invoice: Invoice, _reason: str) -> None:
+    pass
+
+
+async def reject_customer_ids(
+    repository: InvoiceRepositoryInterface,
+    adapter: InvoiceRepository,
+    use_case: InvoiceUseCase,
+    controller: InvoiceController,
+    customer_id: CustomerId,
+    doer: User,
+) -> None:
+    await repository.load(customer_id, lock=False)
+    await repository.load_many([customer_id], lock=True)
+    await adapter.load(customer_id, lock=False)
+    await adapter.load_many([customer_id], lock=True)
+    await use_case.void(customer_id, "reason", None, doer)
+    await controller.get(customer_id)
+    await controller.void(customer_id, "reason", 1)
+    await use_case.void_many([BatchItem(customer_id, "reason")], doer)
+    await controller.void_many([BatchItem(customer_id, "reason")])
+    await apply_batch(repository, Invoice, [BatchItem(customer_id, "reason")], void_invoice)
+    await create_batch(repository, [BatchItem(customer_id, "reason")], make_invoice)

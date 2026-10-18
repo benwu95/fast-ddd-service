@@ -1,0 +1,36 @@
+UV := uv run --frozen
+
+.PHONY: check lockcheck format lint typecheck imports test migration error-catalog
+
+check: lockcheck lint typecheck imports test
+
+lockcheck:
+	uv lock --check
+
+format:
+	$(UV) ruff format .
+	$(UV) ruff check --fix .
+
+lint:
+	$(UV) ruff format --check .
+	$(UV) ruff check .
+
+typecheck:
+	$(UV) pyright
+
+imports:
+	$(UV) fast-ddd-check-packages --config .importlinter --source-root .
+	$(UV) lint-imports --config .importlinter --no-cache
+
+test:
+	$(UV) coverage run -m pytest
+	$(UV) coverage report
+
+# make migration name="add invoice due date"   (needs DATABASE_URL)
+migration:
+	$(UV) fast-ddd-alembic revision --autogenerate --head service@head \
+		--version-path alembic/versions -m "$(name)"
+
+error-catalog:
+	# app.wiring imports every context, so every DomainError and aggregate is registered.
+	PYTHONPATH=. $(UV) fast-ddd-error-catalog app.wiring --output error-catalog.json

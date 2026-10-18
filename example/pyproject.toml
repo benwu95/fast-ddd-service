@@ -1,0 +1,28 @@
+[project]
+name = "example-service"
+version = "0.1.0"
+description = "Reference service for fast-ddd: one complete bounded context"
+requires-python = ">=3.13"
+dependencies = [
+    "fast-ddd-kernel",
+    "uvicorn>=0.54,<1",
+]
+
+[dependency-groups]
+dev = [
+    "asyncpg-stubs>=0.32,<0.33",
+    "coverage>=7.10",
+    "import-linter>=2.15",
+    "pre-commit>=4.7",
+    "pyright==1.1.414",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+    "testcontainers[postgres,rabbitmq]>=4.13",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+fast-ddd-kernel = { workspace = true }

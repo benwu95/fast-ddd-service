@@ -1,0 +1,10 @@
+{
+  "include": ["app", "tests", "alembic"],
+  "exclude": ["alembic/versions"],
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "strict",
+  "enableTypeIgnoreComments": false,
+  "reportUnnecessaryTypeIgnoreComment": "error",
+  "venvPath": "..",
+  "venv": ".venv"
+}

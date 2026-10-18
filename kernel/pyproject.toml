@@ -1,0 +1,122 @@
+[project]
+name = "fast-ddd-kernel"
+version = "0.1.0"
+description = "Shared kernel for fast-ddd services"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.20,<2",
+    "asyncpg>=0.31,<1",
+    "fastapi>=0.143,<1",
+    "faststream[rabbit]>=0.7.7,<0.8",
+    "httpx2>=2.13,<3",
+    "opentelemetry-api>=1.45,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45,<2",
+    "opentelemetry-instrumentation-fastapi==0.66b1",
+    "opentelemetry-sdk>=1.45,<2",
+    "pendulum>=3.3,<4",
+    "pgqueuer[asyncpg]==1.6.0",
+    "pydantic>=2.14,<3",
+    "pydantic-settings>=2.12,<3",
+    "pyjwt[crypto]>=2.15,<3",
+    "sqlalchemy[asyncio]>=2.1.5,<2.2",
+]
+
+[dependency-groups]
+dev = [
+    "asyncpg-stubs>=0.32,<0.33",
+    "coverage>=7.10",
+    "import-linter>=2.15",
+    "pre-commit>=4.7",
+    "pyright==1.1.414",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.14",
+    "testcontainers[postgres,rabbitmq]>=4.13",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fast_ddd", "src/fast_ddd_adapter", "src/fast_ddd_port", "src/fast_ddd_devtools"]
+
+[project.scripts]
+fast-ddd-alembic = "fast_ddd_adapter.migrations:main"
+fast-ddd-check-packages = "fast_ddd_devtools.check_packages:main"
+fast-ddd-error-catalog = "fast_ddd_devtools.error_catalog:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "DTZ", "TID", "ASYNC", "PT", "RET", "ARG", "N"]
+# Domain errors are named after the business rule they reject (e.g. InvoiceAlreadyVoided).
+ignore = ["N818"]
+
+[tool.ruff.lint.per-file-ignores]
+# Snapshot of third-party DDL; keep it byte-for-byte.
+"src/fast_ddd_adapter/migrations/versions/fastddd_0003_pgqueuer.py" = ["E501", "W291", "W293"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Use pendulum.now('UTC')."
+"datetime.datetime.utcnow".msg = "Use pendulum.now('UTC')."
+"datetime.datetime.today".msg = "Use pendulum.now('UTC')."
+"datetime.date.today".msg = "Use pendulum.today('UTC')."
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+enableTypeIgnoreComments = false
+reportUnnecessaryTypeIgnoreComment = "error"
+venvPath = ".."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["fast_ddd", "fast_ddd_adapter", "fast_ddd_port", "fast_ddd_devtools"]
+branch = true
+# SQLAlchemy's asyncio layer runs on greenlets; without this, code after a DB await is lost.
+concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.importlinter]
+root_packages = ["fast_ddd", "fast_ddd_adapter", "fast_ddd_port", "fast_ddd_devtools"]
+include_external_packages = true
+unmatched_ignore_imports_alerting = "error"
+
+[[tool.importlinter.contracts]]
+name = "Kernel layers"
+type = "layers"
+layers = ["fast_ddd_port", "fast_ddd_adapter", "fast_ddd"]
+
+[[tool.importlinter.contracts]]
+name = "Core has no framework dependencies"
+type = "forbidden"
+source_modules = ["fast_ddd"]
+forbidden_modules = ["pydantic", "sqlalchemy", "fastapi", "faststream", "pgqueuer", "asyncpg", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "Adapter does not depend on HTTP or validation frameworks"
+type = "forbidden"
+source_modules = ["fast_ddd_adapter"]
+forbidden_modules = ["fastapi", "pydantic", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "Runtime packages do not depend on devtools"
+type = "forbidden"
+source_modules = ["fast_ddd", "fast_ddd_adapter", "fast_ddd_port"]
+forbidden_modules = ["fast_ddd_devtools"]

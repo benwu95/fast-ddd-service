@@ -1,0 +1,53 @@
+from typing import assert_type
+from uuid import UUID
+
+from fast_ddd.batch import BatchItem, BatchResult, apply_batch, create_batch
+from fast_ddd.context import User
+from fast_ddd_adapter.controller import BatchOutcome, run_batch
+from fast_ddd_port.http import BatchResponse, batch_response
+
+from app.adapter.controller.billing.invoice_controller import InvoiceController
+from app.adapter.repository.billing.invoice_repository import InvoiceRepository
+from app.core.billing.domain.invoice import Invoice, InvoiceContent, InvoiceId
+from app.core.billing.domain.repository import InvoiceRepositoryInterface
+from app.core.billing.use_case.invoice_use_case import InvoiceUseCase
+from app.port.restful.billing.invoice_schemas import InvoiceResponse
+
+
+async def typed_invoice_contract(
+    repository: InvoiceRepositoryInterface,
+    adapter: InvoiceRepository,
+    use_case: InvoiceUseCase,
+    controller: InvoiceController,
+    invoice_id: InvoiceId,
+    organization_id: UUID,
+    content: InvoiceContent,
+    doer: User,
+) -> None:
+    assert_type(await repository.load(invoice_id, lock=False), Invoice)
+    assert_type(await repository.load_many([invoice_id], lock=True), dict[InvoiceId, Invoice])
+    assert_type(await adapter.load(invoice_id, lock=False), Invoice)
+    assert_type(await adapter.load_many([invoice_id], lock=True), dict[InvoiceId, Invoice])
+    items = [BatchItem(invoice_id, "reason")]
+    assert_type(items, list[BatchItem[InvoiceId, str]])
+    assert_type(await use_case.void_many(items, doer), BatchResult[InvoiceId, Invoice])
+    assert_type(await controller.void_many(items), BatchOutcome[InvoiceId, Invoice])
+    applied = await apply_batch(
+        repository, Invoice, items, lambda invoice, reason: invoice.void(reason, doer)
+    )
+    assert_type(applied, BatchResult[InvoiceId, Invoice])
+    created = await create_batch(
+        repository,
+        items,
+        lambda id, _: Invoice.issue(
+            id=id, organization_id=organization_id, content=content, doer=doer
+        ),
+    )
+    assert_type(created, BatchResult[InvoiceId, Invoice])
+    outcome = await run_batch(
+        items,
+        batch=lambda batch: use_case.void_many(batch, doer),
+        single=lambda item: use_case.void(item.id, item.payload, None, doer),
+    )
+    assert_type(outcome, BatchOutcome[InvoiceId, Invoice])
+    assert_type(batch_response(items, outcome, InvoiceResponse.from_domain), BatchResponse[InvoiceResponse])

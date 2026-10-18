@@ -1,0 +1,56 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: uv lock --check
+        entry: make -C kernel lockcheck
+        language: system
+        pass_filenames: false
+        files: (^|/)(pyproject\.toml|uv\.lock)$
+      - id: kernel-pyright
+        name: pyright (kernel)
+        entry: make -C kernel typecheck
+        language: system
+        pass_filenames: false
+        files: ^kernel/
+      - id: kernel-imports
+        name: import-linter (kernel)
+        entry: make -C kernel imports
+        language: system
+        pass_filenames: false
+        files: ^kernel/
+      - id: example-pyright
+        name: pyright (example)
+        entry: make -C example typecheck
+        language: system
+        pass_filenames: false
+        files: ^(example|kernel)/
+      - id: example-imports
+        name: import-linter (example)
+        entry: make -C example imports
+        language: system
+        pass_filenames: false
+        files: ^(example|kernel)/

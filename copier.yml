@@ -32,6 +32,7 @@ kernel_git_url:
 kernel_version:
   type: str
   default: 0.1.0
+  when: false
   validator: >-
     {% if not (kernel_version | regex_search('^[0-9]+\\.[0-9]+\\.[0-9]+$')) %}
     kernel_version must be a three-part version

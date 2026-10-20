@@ -7,7 +7,6 @@ import yaml
 from tests.template.support import PYTHON_VERSION, ROOT
 
 PLUGIN_SKILL = ROOT / "skills/fast-ddd-init/SKILL.md"
-SERVICE_SKILL = ROOT / "template/.agents/skills/fast-ddd/SKILL.md.jinja"
 
 
 def frontmatter(path: Path) -> tuple[dict[str, object], str]:
@@ -82,6 +81,11 @@ INIT_SKILL_RULES = {
         "Ask the service's `fast-ddd` skill to set up secret protection for this host",
     ),
 }
+HAND_OVER_SECRET_PROTECTION = (
+    "Ask the service's `fast-ddd` skill to set up secret protection for this host before using"
+    " real configuration; its secret-protection workflow proposes user-level settings and applies"
+    " them only after the user approves."
+)
 
 
 def test_init_skill_steps_keep_the_manual_creation_contract() -> None:
@@ -127,14 +131,6 @@ def test_init_skill_carries_the_template_source_without_locating_files() -> None
     assert "${CLAUDE_" not in body
 
 
-def test_service_skill_uses_portable_frontmatter_and_renders_the_kernel_version() -> None:
-    metadata, body = frontmatter(SERVICE_SKILL)
-    assert metadata == {"name": "fast-ddd", "description": metadata["description"]}
-    assert isinstance(metadata["description"], str)
-    assert metadata["description"]
-    assert "{{ kernel_version }}" in body
-
-
 def test_operations_guide_lists_user_level_installation_for_each_host() -> None:
     guide = (ROOT / "template/docs/template-operations.md").read_text()
     for command in (
@@ -145,3 +141,15 @@ def test_operations_guide_lists_user_level_installation_for_each_host() -> None:
         "agy plugin install https://github.com/benwu95/fast-ddd-service",
     ):
         assert command in guide
+
+
+def test_init_skill_hands_secret_protection_to_the_service_skill() -> None:
+    _, body = frontmatter(PLUGIN_SKILL)
+    hand_over = sections(body)["## 6. Hand over"]
+    items = [
+        " ".join(item.split())
+        for item in re.findall(r"^\d+\. (.+?)(?=^\d+\. |\Z)", hand_over, re.MULTILINE | re.DOTALL)
+    ]
+
+    assert len(items) == 3
+    assert items[2] == HAND_OVER_SECRET_PROTECTION

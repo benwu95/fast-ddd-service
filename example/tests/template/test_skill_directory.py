@@ -48,6 +48,7 @@ def test_copy_renders_the_service_skill_behind_a_claude_link(
     )
     skill = (tmp_path / SKILL).read_text()
     assert "`9.8.7`" in skill
+    assert "kernel_version" not in (tmp_path / ".copier-answers.yml").read_text()
     assert "{{" not in skill
     assert_claude_link(tmp_path)
     assert not (tmp_path / ".claude/settings.json").exists()

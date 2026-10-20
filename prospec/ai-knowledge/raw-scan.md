@@ -124,7 +124,7 @@ template/
 > non-source ancestor, and both lists are ordered by file volume — a cap keeps the biggest, not the
 > alphabetically first.
 
-- `prospec/` — 30 files: `.md`, `.yaml`
+- `prospec/` — 32 files: `.md`, `.yaml`
 - `docs/` — 2 files: `.md`
 - `example/tests/typing_contracts/` — 2 files: `.txt`
 - `skills/` — 2 files: `.md`, `.yaml`
@@ -135,5 +135,5 @@ template/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 276 |
+| Total files | 278 |
 | Scan depth | 10 |

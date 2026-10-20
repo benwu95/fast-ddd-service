@@ -54,4 +54,4 @@ Tell the user to:
 
 1. Open a new agent session in `<destination>`; the service's own `fast-ddd` skill loads only in a session started there.
 2. Follow `docs/template-operations.md` in the new service to create the lock, sync the environment, and run `make check`.
-3. Ask the service's `fast-ddd` skill to set up secret protection for this host before using real configuration. If that skill does not offer a secret-protection workflow yet, tell the user that host-level secret protection is not set up and that the template no longer ships host permission settings.
+3. Ask the service's `fast-ddd` skill to set up secret protection for this host before using real configuration; its secret-protection workflow proposes user-level settings and applies them only after the user approves.

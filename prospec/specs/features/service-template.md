@@ -2,8 +2,8 @@
 feature: service-template
 status: active
 last_updated: 2026-10-20
-story_count: 6
-req_count: 8
+story_count: 9
+req_count: 12
 ---
 
 # service-template
@@ -25,13 +25,13 @@ req_count: 8
 **Acceptance Scenarios:**
 - WHEN 在 repo 外以本機 kernel 來源產生服務並依指引初始化環境，THEN 服務使用自己的 lock／venv，完整 `make check` 通過且不借用 repo workspace。
 - WHEN 以固定 git tag 的 kernel 來源產生服務，THEN 不需 sibling kernel 目錄即可安裝、通過品質檢查，並能辨識實際使用的 kernel 版本。
-- WHEN 檢視剛產生的服務，THEN 不含 Invoice／Customer／notification 範例業務，不需填寫 notification 設定即可完成初始化，且不新增假 bounded context。
+- WHEN 檢視剛產生的服務，THEN `app/`、`tests/`、`alembic/` 不含 Invoice／Customer／notification 範例業務，不需填寫 notification 設定即可完成初始化，且不新增假 bounded context。
 - WHEN 檢視產生的開發設定與檔案，THEN 不含 agent host 的權限設定，`.gitignore` 排除機密檔案，沒有真實機密被寫入版本控制檔案，lock 可納入版本控制。
 
 #### REQ-TEMPLATE-001: 可獨立驗收的空服務產生
 Python 開發者可產生不含範例業務、具有自有環境且不含 agent host 設定的服務；example 保留 workspace 模式。
 - WHEN 在 repo 外以 git 或 path kernel 來源建立服務，THEN 兩種產物各使用自己的 lock／venv 通過完整品質檢查；git 不依賴 sibling kernel，無效來源／版本明確失敗。
-- WHEN 初始化與檢視服務，THEN 無 Invoice／Customer／notification 業務或假 bounded context，不需 notification 設定；必要 worker 設定與擴充入口可用，不含 agent host 設定，`.gitignore` 排除機密檔案，真實機密不寫入追蹤檔案，lock 可追蹤。
+- WHEN 初始化與檢視服務，THEN `app/`、`tests/`、`alembic/` 沒有 Invoice／Customer／notification 業務或假 bounded context，skill 的參考副本不被 ruff、pyright、pytest、coverage 與 import-linter 檢查或載入；不需 notification 設定，必要 worker 設定與擴充入口可用，不含 agent host 設定，`.gitignore` 排除機密檔案，真實機密不寫入追蹤檔案，lock 可追蹤。
 - WHEN example 重新產生骨架，THEN kernel 仍來自同 repo workspace，使用正確環境；版本 pin 使用明確版本，不取模板 commit 字串代替。
 
 ---
@@ -130,15 +130,83 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 作為以 template 建立服務的開發者，我要讓服務以 `.agents/skills` 提供 repo 層級 skill、`.claude/skills` 以 symlink 指向它，以便 Claude Code、Codex 與 agy 讀到同一份隨 template 更新的 skill。
 
 **Acceptance Scenarios:**
-- WHEN 以 template 產生服務，THEN 產物含已渲染 `kernel_version` 的 `.agents/skills/fast-ddd/SKILL.md`，`.claude/skills` 是指向 `../.agents/skills` 的 symlink。
-- WHEN 對已產生的服務執行 `copier update`，THEN `.claude/skills` 仍是 symlink，skill 內容合併上游與本地修改；Phase 2 產生的服務更新後新增 symlink。
+- WHEN 以 template 產生服務，THEN `.agents/skills/fast-ddd/SKILL.md` 含該 template revision 對應的 `kernel_version`，`.copier-answers.yml` 不記錄它，`.claude/skills` 是指向 `../.agents/skills` 的 symlink。
+- WHEN 對已產生的服務執行 `copier update`，THEN `.claude/skills` 仍是 symlink，skill 內容合併上游與本地修改，SKILL.md 改為新 revision 的 `kernel_version`；Phase 2 產生的服務更新後新增 symlink。
+- WHEN skill 對應的 kernel 版本與 lock 不一致（只更新 template 或只升級 kernel），THEN 服務的 `make check` 失敗，`fast-ddd` 在修改任何檔案前停止並指向升級說明。
 - WHEN 框架 repo 執行 example recopy 與 ownership 檢查，THEN 新路徑已登記，example 含 skill 目錄與 symlink，無漂移。
 
 #### REQ-TEMPLATE-008: 三家共用的 repo 層級 skill 目錄
-服務以單一 skill 目錄供 Claude、Codex 與 agy 讀取，版本隨 template 更新。
-- WHEN 以 template 產生服務，THEN `.agents/skills/fast-ddd/SKILL.md` 含產生時的 `kernel_version`，`.claude/skills` 是指向 `../.agents/skills` 的 symlink。
-- WHEN 服務以 `copier update` 更新，THEN `.claude/skills` 維持 symlink，skill 內容合併上游與本地修改。
+服務以單一 skill 目錄供 Claude、Codex 與 agy 讀取，skill 對應的 kernel 版本隨 template revision 更新。
+- WHEN 以 template 產生服務，THEN `.agents/skills/fast-ddd/SKILL.md` 含該 template revision 的 `kernel_version`，`.copier-answers.yml` 不記錄 `kernel_version`，`.claude/skills` 是指向 `../.agents/skills` 的 symlink。
+- WHEN 服務以 `copier update` 更新至新的 template revision，THEN SKILL.md 渲染新 revision 的 `kernel_version`，answers 既有的 `kernel_version` 被移除，`.claude/skills` 維持 symlink，skill 內容合併上游與本地修改。
+- WHEN copy 時以 `-d kernel_version=...` 指定版本，THEN 依 validator 驗證，只用於該次渲染，不寫入 answers。
 - WHEN 框架 example recopy，THEN skill 目錄與 symlink 和 template 一致，新路徑已登記於歷史 ownership。
+
+---
+
+
+#### REQ-TEMPLATE-009: 服務的 kernel 版本檢查
+服務以確定性的檢查比對 skill 對應的 kernel 版本與 lock 中的版本，不一致時品質檢查與 skill 都停止。
+- WHEN lock 中 `fast-ddd-kernel` 的版本等於 skill 對應的 `kernel_version`，THEN 版本檢查以 exit 0 結束。
+- WHEN 兩者不同、lock 不存在、lock 中沒有 `fast-ddd-kernel`，或無法取得任一邊的版本，THEN 版本檢查以非 0 結束並列出兩邊的值與升級說明，不修改任何檔案。
+- WHEN 服務以 workspace 模式取得 kernel，THEN 檢查讀 workspace 根目錄的 `uv.lock`；git 與 path 模式讀服務根目錄的 `uv.lock`。
+- WHEN 執行服務的 `make check`，THEN 版本檢查是其中一步。
+- WHEN 版本不一致時要求 `fast-ddd` 執行工作流程，THEN skill 在修改任何檔案前停止並指向升級說明。
+
+---
+
+### US-7: 參考程式碼副本與參考服務保持一致 [P0]
+
+作為框架維護者，我要讓 skill 內的參考程式碼副本由 example 產生並由 CI 比對，以便服務 repo 沒有 `example/` 時，agent 仍讀到與參考服務相同的程式碼。
+
+**Acceptance Scenarios:**
+- WHEN 副本與 example 一致，THEN repo 根目錄的 `make check` 通過。
+- WHEN example 的清單檔案修改後未重新產生副本、副本含清單外的檔案，或來源刪除後副本仍保留舊檔，THEN `make check` 失敗並指出路徑。
+- WHEN 以 template 產生服務，THEN `.agents/skills/fast-ddd/references/example/` 含清單檔案，服務的 ruff 不檢查 `.agents/`；example recopy 無漂移，新路徑已登記於 ownership。
+
+#### REQ-TEMPLATE-010: skill 內的參考程式碼副本
+框架 repo 把參考服務的固定檔案清單複製進服務 skill，並確保副本與 example 一致。
+- WHEN 副本與 example 的清單檔案一致，THEN 一致性檢查通過。
+- WHEN 清單檔案在 example 修改後未重新產生、副本含清單外的檔案、清單檔案從 example 刪除後副本仍保留，或清單項目在 example 找不到，THEN repo 根目錄的 `make check` 失敗並指出路徑。
+- WHEN 維護者執行副本同步，THEN template 副本、example 的副本與 ownership 清單一起更新，來源已刪除的檔案不留在 example。
+- WHEN 以 template 產生服務，THEN `.agents/skills/fast-ddd/references/example/` 含清單檔案，服務的 ruff 不檢查 `.agents/`。
+- WHEN 框架 example recopy，THEN 副本隨 skill 同步且不包含 `.agents/`，新路徑已登記於歷史 ownership。
+
+---
+
+### US-8: 以 skill 的工作流程擴充服務 [P0]
+
+作為以 agent 開發服務的後端開發者，我要在服務 repo 中依 `fast-ddd` 的工作流程新增 bounded context、aggregate、domain 指令、批次操作、event handler、MQ consumer、背景工作與 cron，以便產出符合分層規則與必要測試，且 `make check` 通過。
+
+**Acceptance Scenarios:**
+- WHEN Claude Code、Codex 或 agy 以自動觸發或手動呼叫載入服務內的 `fast-ddd`，THEN 能讀到相對於 SKILL.md 的 `references/` 檔案。
+- WHEN 檢視 skill，THEN 七個程式碼工作流程各自列出要修改的檔案、要載入的規則、參考程式碼與必要測試，規則與決策紀錄涵蓋分層、時間、序列化、路由、status code、錯誤代碼、命名與資安。
+- WHEN 要求新增 aggregate 而未指定 domain 指令，THEN 只產生 list、get、create、PATCH、delete，不加入 `status` enum。
+- WHEN 在新產生的服務中依工作流程新增 bounded context，THEN 產出含必要測試並通過 `make check`。
+
+#### REQ-TEMPLATE-011: skill 的工作流程與規則
+服務內的 `fast-ddd` 依工作流程產生符合分層規則、附必要測試的程式碼。
+- WHEN 要求新增 bounded context、aggregate、domain 指令、批次操作、event handler、MQ consumer、背景工作或 cron，THEN skill 依對應工作流程修改檔案、載入 reference，並產生該工作流程規定的測試。
+- WHEN 要求新增 aggregate 而未指定 domain 指令，THEN 只產生 list、get、create、PATCH、delete，不加入 `status` enum。
+- WHEN skill 依工作流程產生程式碼，THEN 可載入分層、時間、序列化、路由、status code 與錯誤代碼、命名、資安規則與決策紀錄的 reference。
+- WHEN Claude Code、Codex 或 agy 以自動觸發或手動呼叫載入 skill，THEN 能讀取 `references/` 下的檔案。
+- WHEN 在新產生的服務中依工作流程新增 bounded context，THEN 產出通過服務的 `make check`。
+
+---
+
+### US-9: 由 skill 引導機密保護設定 [P1]
+
+作為在本機使用 agent host 的開發者，我要由 `fast-ddd` 依目前 host 的官方文件提出使用者層級的機密保護設定，以便 agent 讀不到 `.env*`、金鑰、憑證與含機密的環境變數。
+
+**Acceptance Scenarios:**
+- WHEN 要求設定機密保護，THEN skill 先辨識 host 與版本並查閱當下的官方文件，提出使用者層級的變更，經使用者核准後才套用；不寫入 managed 設定，也不修改 repo 內的檔案或設定。
+- WHEN 設定套用後，THEN skill 以不顯示機密值的探測驗證，執行 `make check`，並回報剩餘缺口。
+- WHEN `fast-ddd-init` 完成建立，THEN 交接步驟指向這個工作流程。
+
+#### REQ-TEMPLATE-012: 機密保護設定工作流程
+`fast-ddd` 引導使用者設定 host 的機密保護，不修改 repo 內的檔案。
+- WHEN 要求設定機密保護，THEN skill 辨識 host 與版本，依當下的官方文件提出使用者層級的變更，經使用者核准後才套用；不寫入 managed 設定或 repo 內的檔案。
+- WHEN 設定套用後，THEN skill 以不顯示機密值的探測驗證（`.env` 只取位元組數、環境變數只列名稱），執行 `make check`，並回報剩餘缺口；保護與品質檢查衝突時由使用者決定。
 
 ---
 
@@ -149,6 +217,8 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 - 下游外層可直接修改；更新衝突保留雙方內容與未解狀態，維護者處理後重新驗證。
 - 框架歷史 ownership 永久保留退役路徑；CI 只回報殘留，不自動刪檔或寫清單。
 - snapshot 內部 symlink 重定位到副本；外部路徑在寫入前拒絕。
+- 版本檢查讀不到 lock、lock 沒有 `fast-ddd-kernel` 或 SKILL.md 的版本欄位缺漏、重複時視為不一致，訊息列出兩邊可取得的值；`make` 在 recipe 失敗時一律 exit 2，skill 以固定的失敗訊息判斷是否為版本不一致。
+- 中介 package 缺少 `__init__.py` 時 `fast-ddd-check-packages` 不報錯，import-linter 會略過該子樹；skill 要求每次新增目錄後明確檢查。
 - template 退役的追蹤檔案（`.claude/settings.json`）在 update 時被刪除，即使服務修改過也無衝突；服務已有實體 `.claude/skills` 目錄時 update 失敗，需先把 skill 移到 `.agents/skills/`。
 
 ## Success Criteria
@@ -158,6 +228,7 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 - 兩版更新保留可合併客製化與初始化內容，衝突與 framework example 漂移有負向驗收。
 - kernel／example 的 wire、分層、交易與 lifecycle regression 保留，搬移測試具 node ID 對照。
 - 產物的 `.claude/skills` 在 copy 與 update 後皆為指向 `../.agents/skills` 的 symlink，不含 agent host 設定。
+- 版本不一致、參考副本漂移與 skill 結構各有 CI 測試；三家 host 的端到端驗收以手動執行並記錄。
 
 ## Maintenance Rules
 
@@ -174,5 +245,6 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-10-20 | add-fast-ddd-service-skill | ADDED REQ-TEMPLATE-009; ADDED REQ-TEMPLATE-010; ADDED REQ-TEMPLATE-011; ADDED REQ-TEMPLATE-012; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-008 | REQ-TEMPLATE-009, REQ-TEMPLATE-010, REQ-TEMPLATE-011, REQ-TEMPLATE-012, REQ-TEMPLATE-001, REQ-TEMPLATE-008 |
 | 2026-10-20 | ship-fast-ddd-init-plugin | ADDED REQ-TEMPLATE-008; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-004 | REQ-TEMPLATE-008, REQ-TEMPLATE-001, REQ-TEMPLATE-004 |
 | 2026-10-18 | extract-service-template | 新增服務骨架與完整驗收規格 | REQ-TEMPLATE-001, REQ-TEMPLATE-002, REQ-TEMPLATE-003, REQ-TEMPLATE-004, REQ-TEMPLATE-005, REQ-TEMPLATE-006, REQ-TEMPLATE-007 |

@@ -25,7 +25,7 @@ def test_source_and_baseline_answers_are_persistent(
     assert answers["kernel_source"] == source
     assert answers["coverage_minimum"] == 90
     assert answers["initialize_service_baseline"] is False
-    assert answers["kernel_version"] == "0.1.0"
+    assert "kernel_version" not in answers
     assert not (destination / "uv.lock").exists()
 
 
@@ -37,6 +37,7 @@ def test_source_and_baseline_answers_are_persistent(
         {"service_name": "../escape"},
         {"service_name": "Bad Name"},
         {"kernel_source": "unknown"},
+        {"kernel_version": "1.0"},
     ],
 )
 def test_invalid_configuration_is_rejected(
@@ -46,3 +47,20 @@ def test_invalid_configuration_is_rejected(
         run_copy(
             str(template_repository), tmp_path / "service", vcs_ref="HEAD", defaults=True, data=data
         )
+
+
+def test_kernel_version_override_renders_without_persisting(
+    tmp_path: Path, template_repository: Path
+) -> None:
+    destination = tmp_path / "service"
+    run_copy(
+        str(template_repository),
+        destination,
+        vcs_ref="HEAD",
+        defaults=True,
+        data={"kernel_version": "9.8.7"},
+    )
+    answers = yaml.safe_load((destination / ".copier-answers.yml").read_text())
+    assert "kernel_version" not in answers
+    skill = (destination / ".agents/skills/fast-ddd/SKILL.md").read_text()
+    assert "- Kernel version: `9.8.7`\n" in skill

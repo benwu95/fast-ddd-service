@@ -21,14 +21,13 @@ agy plugin install https://github.com/benwu95/fast-ddd-service
 
 ## 建立服務與環境
 
-使用 Copier 9.19.1、uv 與 Python 3.13.12。Git 模式要求 `v<kernel_version>` tag 已存在；驗收使用的隔離 tag 不代表遠端已發布。template ref 與 kernel version 分開選擇，不使用 `_commit` 推導 kernel 版本。
+使用 Copier 9.19.1、uv 與 Python 3.13.12。Git 模式要求 `v<kernel_version>` tag 已存在；驗收使用的隔離 tag 不代表遠端已發布。kernel 版本跟著 template revision：`TEMPLATE_REF` 對應的 `copier.yml` 決定 `kernel_version`，產物的 Git 相依 tag 與服務內 skill 都使用它，`.copier-answers.yml` 不記錄它。不使用 `_commit` 推導 kernel 版本。
 
 ```sh
 TEMPLATE_REF=main
-KERNEL_VERSION=0.1.0
 uvx --python 3.13.12 --from copier==9.19.1 copier copy \
   --vcs-ref "$TEMPLATE_REF" --defaults \
-  -d service_name=orders-service -d kernel_version="$KERNEL_VERSION" \
+  -d service_name=orders-service \
   https://github.com/benwu95/fast-ddd-service orders-service
 cd orders-service
 uv lock --python 3.13.12
@@ -120,7 +119,7 @@ template 退役的追蹤檔，update 會從服務刪除，即使服務修改過�
 
 `.claude/skills` 由 template 產生為 symlink。若服務已有同名的實體目錄，update 會失敗；更新前先把其中的 skill 移到 `.agents/skills/`，刪除該目錄並提交，再執行 update。
 
-template 更新不等於 kernel 已升級。保留自己的相依，手動修改 `pyproject.toml` 的 kernel Git tag 或 path，執行 `uv lock --upgrade-package fast-ddd-kernel`、`uv sync --frozen`、完整 `make check` 並檢視 lock diff。若更新 `kernel_version` 答案，同次明確傳入 `-d kernel_version=...`；答案改變不會替你改寫相依或 lock。
+template 更新不等於 kernel 已升級。update 到新的 template revision 後，服務內 skill 對應該 revision 的 kernel 版本；lock 中的 `fast-ddd-kernel` 版本不同時，`make check` 的第一步 `make kernel-version` 失敗，`fast-ddd` skill 也會停止。保留自己的相依，依序完成 template 與 kernel 的更新：先以上述 `update` 取得新的 template revision；手動修改 `pyproject.toml` 的 kernel Git tag（`v<新版本>`）或 path；執行 `uv lock --upgrade-package fast-ddd-kernel` 與 `uv sync --frozen`；以 `make kernel-version` 確認一致；最後執行完整 `make check` 並檢視 lock diff。只升級 kernel 而沒有更新 template 時，`make kernel-version` 同樣失敗，以 `update` 取得版本對應的 template revision。
 
 更新失敗時先檢視 `git diff "$CHECKPOINT"`。要恢復該 checkpoint 的追蹤檔，可執行 `git restore --source "$CHECKPOINT" --staged --worktree -- .`；再用 `git status --short` 檢視未追蹤檔，只移除本次生成且確定不要的項目。Git 復原不會復原資料庫；Copier 本身不會執行 migrations。
 

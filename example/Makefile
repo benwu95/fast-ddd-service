@@ -1,8 +1,11 @@
 UV := uv run --frozen
 
-.PHONY: check lockcheck format lint typecheck imports test migration error-catalog
+.PHONY: check kernel-version lockcheck format lint typecheck imports test migration error-catalog
 
-check: lockcheck lint typecheck imports test
+check: kernel-version lockcheck lint typecheck imports test
+
+kernel-version:
+	uv run --no-project --python 3.13 python -I .agents/skills/fast-ddd/scripts/check_kernel_version.py
 
 lockcheck:
 	uv lock --check

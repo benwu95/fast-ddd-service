@@ -28,7 +28,7 @@
 
 ## Modification Guide
 
-1. 改建立步驟 → `SKILL.md` → 同步 `test_plugin_contract.py` 的 `INIT_SKILL_RULES`（每條對應一項建立流程的保證：來源與版本、確認、停止條件、answers 核對與交接）→ 三家端到端重驗。
+1. 改建立步驟 → `SKILL.md` → 同步 `test_plugin_contract.py` 的 `INIT_SKILL_RULES`（每條對應一項建立流程的保證：來源與版本、確認、停止條件、answers 核對與交接；交接第 3 點以完整句子鎖定，指向服務內 `fast-ddd` 的機密保護工作流程）→ 三家端到端重驗。
 2. 改版本 → 兩份 manifest、`copier.yml` 的 `kernel_version`、`kernel/pyproject.toml` 與 SKILL.md 的 Template version 一起改，`scripts/check_versions.py` 在 `make check` 強制一致；其餘版本字面值（`template/docs/template-operations.md` 範例、`example/tests/template/` 的 fixture tag 與斷言、`example/.copier-answers.yml`）不受此檢查，以 `grep -rn '0\.1\.0'` 逐一確認。發布的 git tag 必須是 `v<版本>`。
 3. 改 copier／Python 版本 → `copier.yml` 的 `_min_copier_version` 或 `support.PYTHON_VERSION` 與 SKILL.md 指令同步，contract test 比對整段指令。
 4. 新增 plugin 元件 → 只交付 skill；hooks、MCP、commands 不在範圍。

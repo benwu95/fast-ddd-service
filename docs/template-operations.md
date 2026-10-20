@@ -18,6 +18,8 @@ snapshot 會將來源 repo 內的 symlink 重新定位到副本內；來源外�
 
 新增或退役骨架檔案時執行 `make template-ownership`，檢視清單與 example 的同步差異，再執行 `make check`。此命令對目前 working tree 建隔離 snapshot，只以原子 replace 更新清單；歷史路徑永久保留，不能因來源刪檔而刪除紀錄。退役副本由維護者確認後移除；一般 check／CI 不更新清單、不自動刪檔。
 
+服務內 `fast-ddd` skill 的參考程式碼副本（`template/.agents/skills/fast-ddd/references/example/`）由 `scripts/check_template.py` 的 `REFERENCE_SOURCES` 清單從 example 產生。template-check 比對副本與來源：副本過期、多出清單外的檔案、來源已刪除或清單項目找不到時都會失敗。修改清單內的 example 檔案或清單本身後，執行 `make template-references`：它在暫存目錄產生副本並整批替換、移除 example 內的舊副本後 recopy，再登記 ownership，不必另外執行 recopy 或 `make template-ownership`。它和手動 recopy 一樣會覆寫 example 中 template 追蹤檔的未提交修改，執行前先保存並檢視；中途失敗時重跑同一指令即可。
+
 若刻意同步 example，先保存並檢視其既有修改，再從 `example/` 執行 `uv run --frozen copier recopy --overwrite --defaults --vcs-ref HEAD` 並檢視 diff；它是有意的覆寫操作。answers 固定 `_src_path: ..`、`kernel_source: workspace`、`initialize_service_baseline: false`。服務初始化檔與既有 billing／notification／migrations 保留；業務內容繼續在 example 自行維護。
 
 驗收 Git server 僅綁 `127.0.0.1`，host 與 builder 共用 `host.docker.internal` URL；host 暫時以 [Git curloptResolve](https://git-scm.com/docs/git-config/2.46.1.html#Documentation/git-config.txt-httpcurloptResolve) 解析到 loopback。Mac 使用 Docker Desktop 的 host 路由，Linux builder 使用 host network；不修改 lock 的來源，不修改系統 hosts／Git config，fixtures 結束即關閉 server。

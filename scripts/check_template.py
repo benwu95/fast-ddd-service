@@ -11,6 +11,35 @@ import yaml
 from copier import run_copy
 from copier.errors import CopierError
 
+REFERENCE_COPY = PurePosixPath("template/.agents/skills/fast-ddd/references/example")
+REFERENCE_SOURCES = (
+    "app/core/billing",
+    "app/adapter/controller/__init__.py",
+    "app/adapter/controller/billing",
+    "app/adapter/event_handler/__init__.py",
+    "app/adapter/event_handler/billing",
+    "app/adapter/repository/billing",
+    "app/adapter/repository/models.py",
+    "app/adapter/notification",
+    "app/adapter/resources.py",
+    "app/port/message_queue/__init__.py",
+    "app/port/message_queue/customer",
+    "app/port/restful/__init__.py",
+    "app/port/restful/billing",
+    "app/port/task/__init__.py",
+    "app/port/task/billing",
+    "app/settings.py",
+    "app/wiring.py",
+    "alembic/versions/2026_10_18_0000-3f6a1c2d9b10_create_billing_invoice.py",
+    "tests/adapter",
+    "tests/conftest.py",
+    "tests/core/__init__.py",
+    "tests/core/test_invoice.py",
+    "tests/port",
+    "tests/support.py",
+    "tests/test_error_catalog.py",
+)
+
 
 def _git(root: Path, *arguments: str) -> str:
     return subprocess.run(
@@ -153,6 +182,82 @@ def _record_ownership(root: Path) -> int:
     return 0
 
 
+def _listed_files(root: Path, pathspec: str) -> list[str]:
+    names = _git(
+        root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", pathspec
+    )
+    return [name for name in names.split("\0") if name and (root / name).is_file()]
+
+
+def _reference_sources(root: Path) -> list[str]:
+    files: set[str] = set()
+    for entry in REFERENCE_SOURCES:
+        found = _listed_files(root, f"example/{entry}")
+        if not found:
+            raise ValueError(f"reference source has no files: example/{entry}")
+        for name in found:
+            if (root / name).is_symlink():
+                raise ValueError(f"reference source must be a regular file: {name}")
+            files.add(PurePosixPath(name).relative_to("example").as_posix())
+    return sorted(files)
+
+
+def _reference_drift(root: Path) -> list[str]:
+    sources = _reference_sources(root)
+    copy = root / REFERENCE_COPY
+    copied = {
+        PurePosixPath(name).relative_to(REFERENCE_COPY).as_posix()
+        for name in _listed_files(root, REFERENCE_COPY.as_posix())
+    }
+    problems: list[str] = []
+    for name in sources:
+        if name not in copied:
+            problems.append(f"missing: {name}")
+        elif (copy / name).read_bytes() != (root / "example" / name).read_bytes():
+            problems.append(f"stale: {name}")
+    problems += [f"extra: {name}" for name in sorted(copied - set(sources))]
+    return problems
+
+
+def _recopy_example(example: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "copier",
+            "recopy",
+            "--overwrite",
+            "--defaults",
+            "--vcs-ref",
+            "HEAD",
+        ],
+        cwd=example,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _sync_references(root: Path) -> int:
+    sources = _reference_sources(root)
+    target = root / REFERENCE_COPY
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".references-", dir=target.parent) as directory:
+        staged = Path(directory) / "example"
+        for name in sources:
+            copied = staged / name
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / "example" / name, copied)
+        previous = Path(directory) / "previous"
+        if target.exists():
+            target.rename(previous)
+        staged.rename(target)
+    example = root / "example"
+    shutil.rmtree(example / REFERENCE_COPY.relative_to("template"), ignore_errors=True)
+    _recopy_example(example)
+    return _record_ownership(root)
+
+
 def _check(root: Path) -> int:
     if _git(root, "status", "--porcelain", "--untracked-files=all"):
         raise ValueError("dirty tree: commit changes or use --snapshot before checking")
@@ -171,22 +276,8 @@ def _check(root: Path) -> int:
         for name in known - current - preserved
         if (example / name).is_symlink() or (example / name).is_file()
     )
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "recopy",
-            "--overwrite",
-            "--defaults",
-            "--vcs-ref",
-            "HEAD",
-        ],
-        cwd=example,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    references = _reference_drift(root)
+    _recopy_example(example)
     diff = _git(root, "diff", "--", "example", ":(exclude)example/.copier-answers.yml")
     untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", "example")
     after = _answers(answers_file)
@@ -212,7 +303,10 @@ def _check(root: Path) -> int:
     if before != after:
         print("Answers changed: example/.copier-answers.yml")
         print(yaml.safe_dump({"before": before, "after": after}, sort_keys=True))
-    if diff or untracked or before != after or unrecorded or retired:
+    if references:
+        print("Skill reference copy differs from example (run make template-references):")
+        print("\n".join(references))
+    if diff or untracked or before != after or unrecorded or retired or references:
         return 1
     print("Template and example match; only _commit may change")
     return 0
@@ -224,11 +318,14 @@ def main(argv: list[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--snapshot", action="store_true")
     mode.add_argument("--update-ownership", action="store_true")
+    mode.add_argument("--sync-references", action="store_true")
     args = parser.parse_args(argv)
     try:
         root = cast(Path, args.root).resolve(strict=True)
         if args.update_ownership:
             return _record_ownership(root)
+        if args.sync_references:
+            return _sync_references(root)
         if args.snapshot:
             with tempfile.TemporaryDirectory(prefix="fast-ddd-template-") as directory:
                 return _check(snapshot_repository(root, Path(directory) / "repository"))

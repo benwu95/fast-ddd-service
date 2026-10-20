@@ -57,7 +57,7 @@ fast-ddd-service/
 - **開發 repo 與服務 repo 的邊界**：此 repo 集中維護 kernel、template 與單一參考服務 example；workspace 用於框架本身的開發與驗收，不是多個後端服務共置的交付模式。各服務 repo 分別安裝版本化 kernel，共用程式碼不代表共用執行中的 Runtime、connection 或 process。
 - **kernel 用 git tag 相依**：`fast-ddd-kernel @ git+https://github.com/benwu95/fast-ddd-service@vX.Y.Z#subdirectory=kernel`，不發布到 PyPI。
 - **kernel 來源與執行環境**：copier template 提供 `kernel_source`（`git`／`path`／`workspace`，預設 `git`）。一般服務用上述 git tag；本機整合測試用 `path`，由 `kernel_path` 指定 kernel 位置（預設 `../kernel`）。Phase 1 的 `example/` 實際使用 uv workspace，Phase 2 保留 `{ workspace = true }`，並在 `.copier-answers.yml` 記錄 `workspace`；此模式供 repo 內的參考服務使用。standalone 服務擁有自己的 `.venv` 與 `uv.lock`，不得複製 repo 根目錄的 workspace lock；Pyright 的 venv 位置依模式渲染，workspace 使用父目錄，standalone 使用服務目錄。三種來源模式都必須有明確的相依宣告與驗收。
-- **git tag 的版本號**：template 中的 kernel 版本是一個明確的常數（`copier.yml` 的 `kernel_version`，發布時和兩份 plugin manifest 的 `version` 一起調整），不使用 copier 的 `_commit` 變數。`_commit` 是 template 的 git describe 字串（例如 `v0.1.0-3-ga9258e4`），每個 commit 都不同，也不是有效的 kernel 版本；任何骨架檔案都不可以渲染 `{{ _commit }}`。`kernel_version` 設 `when: false`，不寫入 `.copier-answers.yml`：持久化的答案會被 `copier update` 沿用，2026-10-20 以 copier 9.19.1 實測，從 `v0.1.0` 更新到 default 已改為 `0.2.0` 的 `v0.2.0` 後，`_commit` 是 `v0.2.0`，渲染的值卻仍是 `0.1.0`。不持久化後，渲染的值永遠是該 template revision 的常數；`copy` 時仍可用 `-d kernel_version=...` 覆寫一次，validator 照樣檢查，覆寫值同樣不寫入 answers。answers 已存有 `kernel_version` 的服務，下次 `copier update` 時 copier 會自動移除這個答案（同日實測）。
+- **git tag 的版本號**：template 中的 kernel 版本是一個明確的常數（`copier.yml` 的 `kernel_version`，發布時和兩份 plugin manifest 的 `version` 一起調整），不使用 copier 的 `_commit` 變數。`_commit` 是 template 的 git describe 字串（例如 `v0.1.0-3-ga9258e4`），每個 commit 都不同，也不是有效的 kernel 版本；任何骨架檔案都不可以渲染 `{{ _commit }}`。`kernel_version` 設 `when: false`，不寫入 `.copier-answers.yml`：持久化的答案會被 `copier update` 沿用，2026-10-20 以 copier 9.19.1 實測，從 `v0.1.0` 更新到 default 已改為 `0.2.0` 的 `v0.2.0` 後，`_commit` 是 `v0.2.0`，渲染的值卻仍是 `0.1.0`。不持久化後，渲染的值永遠是該 template revision 的常數；`copy` 時仍可用 `-d kernel_version=...` 覆寫一次，validator 照樣檢查，覆寫值同樣不寫入 answers；此覆寫只供框架測試，服務以覆寫值建立後，`copier update` 會在 SKILL.md 的版本欄位產生衝突（2026-10-20 實測）。answers 已存有 `kernel_version` 的服務，下次 `copier update` 時 copier 會自動移除這個答案（同日實測）。
 - **版本**：plugin、kernel、template 共用同一個版本號和 git tag。`.claude-plugin/plugin.json`、根目錄 `plugin.json`、`copier.yml` 的 `kernel_version`、`kernel/pyproject.toml` 的 `version` 與 `fast-ddd-init` SKILL.md 的 Template version 必須一致，由 `make check` 中的一致性檢查強制（第 15.2 節）。manifest 的 `version` 沒變時，Claude 已安裝的使用者不會收到 `fast-ddd-init` 的更新，Codex 也以 manifest 的版本作為快取目錄，所以發布時一定要同步調整。服務內的 `fast-ddd` 版本隨 template，由 `copier update` 升級。
 - **skill 的交付與版本**：`fast-ddd` 由 template 產生進服務 repo 的 `.agents/skills/`，`.claude/skills` 是指向它的 symlink。skill 只存在於 fast-ddd 服務中，版本隨 template，和其他 template 追蹤的檔案一起以 `copier update` 升級，不受使用者層級安裝的 plugin 版本影響；不採用在專案設定鎖定 plugin 版本或執行時依版本下載內容的做法，取捨見第 15.2 節。`fast-ddd-init` 在服務建立之前執行，只能由使用者層級安裝的 plugin 提供；它只用 plugin 自己的版本建立新服務，沒有版本錯配的問題。template 不寫入任何 plugin 宣告，新環境依 `template/docs/template-operations.md` 的指令手動安裝一次。
 - **機密檔案的保護**：設定和機密一律從環境變數讀取，不寫進任何會被 commit 的檔案（包括 pytest 設定）；kernel 的 `KernelSettings` 不自動載入 `.env`，template 的 `.gitignore` 排除 `.env*`、金鑰與憑證檔案。最主要的防線是機密不進入 agent 的環境：本機不放正式環境或共用的機密，啟動 agent 的 shell 不 export 機密，由開發者負責。template 不放任何 agent host 的權限設定（Phase 2 的 `.claude/settings.json` 移除）：三家官方都不把 deny 規則當主要防線，相關設定標示為 beta 或 preview、變動快，Claude 的遮罩設定與 agy 的權限規則也只能放在使用者層級。改由 skill 引導 agent 依自己 host 當下的官方文件提出使用者層級的設定變更，經使用者核准後套用並驗證（第 14.2 節）。
@@ -160,13 +160,12 @@ Phase 3 另以 optional extra `fast-ddd-kernel[realtime]` 加入即時推播的 
 服務端（根設定要有 `include_external_packages = True`）：
 
 - `layers`：`app.port` > `app.adapter` > `app.core`。
-- `forbidden`：`app.core` 不得 import `fast_ddd_adapter`、`fast_ddd_port`、`pydantic`、`sqlalchemy`、`fastapi`、`faststream`。
-- `forbidden`：`app.adapter` 不得 import `fast_ddd_port`、`fastapi`。
+- `forbidden`：`app.core` 不得 import `fast_ddd_adapter`、`fast_ddd_port`、`pydantic`、`sqlalchemy`、`fastapi`、`faststream`、`app.settings`。
+- `forbidden`：`app.adapter` 不得 import `fast_ddd_port`、`fastapi`、`app.settings`（`app.settings` 併入這兩條 contract，不另設 contract；第 6.3 節）。
 - `forbidden`：`app.port` 不得 import `app.adapter.repository`（port 只能透過 controller 使用 adapter，不直接存取 repository），設定 `allow_indirect_imports = True`。forbidden contract 預設會檢查間接 import，而 port → controller → repository 正是設計要求的路徑；實測（import-linter）不設定時這條鏈會被判定為違規。
 - `independence`：各 bounded context 的 `core` 之間互相獨立。
 - 根設定加上 `unmatched_ignore_imports_alerting = error`：`ignore_imports` 中已經不存在的例外會直接報錯，例外清單只能縮小、不會殘留失效的項目。
-- **contract 涵蓋檢查**：import-linter（底層的 grimp）不分析沒有 `__init__.py` 的目錄，裡面的 import 會被靜默略過。kernel 提供一個檢查指令，納入 `make check`：`app/` 下每個目錄都必須是一般套件（有 `__init__.py`），而且每個最上層模組都至少出現在一條 contract 中。這個檢查本身也要有測試。
-- `forbidden`：`app.core`、`app.adapter` 不得 import `app.settings`（第 6.3 節）。
+- **contract 涵蓋檢查**：import-linter（底層的 grimp）不分析沒有 `__init__.py` 的目錄，裡面的 import 會被靜默略過。kernel 提供一個檢查指令，納入 `make check`：`app/` 下直接含有 `.py` 檔的目錄都必須是一般套件（有 `__init__.py`），而且每個最上層模組都至少出現在一條 contract 中。只含子套件的中間目錄（例如 `app/core/<context>/`）不在檢查範圍內；它缺少 `__init__.py` 時，import-linter 會略過其下所有模組、仍回報所有 contract 都 kept，而這個檢查也不會失敗（已實測），因此 skill 規定 `app/` 下每個目錄都要有 `__init__.py`，並在新增目錄時明確檢查。這個檢查本身也要有測試。
 - `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `app.bootstrap`、`app.wiring`、`app.main`、`app.consumer`、`app.task_worker`（第 6.3 節：只有進入點可以 import 組裝點和接線）。
 - `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `pgqueuer`（第 11.1 節：PgQueuer 只能出現在 kernel 的實作中，服務一律透過 `TaskQueue` 介面使用）。
 
@@ -274,7 +273,7 @@ kernel（`fast_ddd_port`）提供以下 base model。實測（pydantic 2.14）�
 - **時間戳由應用程式設定，ORM 不使用 `server_default`／`onupdate`**：資料庫產生的時間戳需要回讀，會讓 UPDATE 無法合併成 executemany，201 回應也拿不到 `created_at`。`created_at` 由 aggregate 建立時設定，`updated_at` 由 `save_many` 設定（第 8.2 節），兩者都是 `pendulum.now("UTC")`。
 - **子集合的 mapping**：沒有識別的 value object 集合（例如 frozen dataclass 的 list），儲存時整批替換（刪除舊列、插入新列）；有識別的子 entity 依 id 比對新增、修改、刪除。
 - **刪除**：維持原版的實體刪除。子資料表的 foreign key 設 `ON DELETE CASCADE`，ORM relationship 設 `passive_deletes=True`，由資料庫刪除子資料列，不逐筆載入。
-- **constraint 命名**：kernel 的 `MetaData` 設定 `naming_convention`（例如 `pk_%(table_name)s`、`uq_%(table_name)s_%(column_0_name)s`），constraint 名稱固定，IntegrityError 才能依名稱對應錯誤代碼（第 9.5 節）。
+- **constraint 命名**：kernel 的 `MetaData` 設定 `naming_convention`（例如 `pk_%(table_name)s`、`uq_%(table_name)s_%(column_0_N_name)s`，多欄 unique constraint 以所有欄位命名，例如 `uq_billing_invoice_organization_id_number`），constraint 名稱固定，IntegrityError 才能依名稱對應錯誤代碼（第 9.5 節）。
 - **kernel 資料表的 migration**：kernel 擁有的資料表（`domain_event`、`processed_message`）由 kernel 隨版本提供 Alembic migration，放在 kernel 套件內的獨立 version location，使用自己的 branch label（例如 `fast_ddd`）。Alembic 在執行 `env.py` 之前就依 `version_locations` 建好 script directory，`env.py` 來不及加入 kernel 的位置（已實測），所以由 kernel 提供 `fast-ddd-alembic` 指令（參數和 `alembic` 相同，執行前把 kernel 的 version location 加進設定；服務的 `alembic.ini` 必須設 `path_separator = os`），測試則對自己建立的 `Config` 呼叫 `add_kernel_versions(config)`。服務執行 `fast-ddd-alembic upgrade heads` 時一併套用。template 的 `env.py` import 服務自己的 `app/adapter/repository/models.py`（服務擁有，列出每個定義 ORM model 的模組），資料表才會登記在 `Base.metadata` 上。kernel 的 ORM model 使用和服務相同的 `MetaData`，服務 autogenerate 時不會把 kernel 的資料表當成多出來或缺少的表。升級 kernel 版本後，新的 kernel migration 會隨 `upgrade heads` 自動套用。（Phase 1 spike 已實測，Alembic 1.20：兩個 branch 各有一個 head，`alembic upgrade heads` 會套用兩者，資料庫和 model 一致時 `alembic check` 通過、model 多出欄位時失敗。設定多個 version location 後，`alembic revision` 必須指定 `--version-path` 和 `--head <branch>@head`，template 的 `make migration` 把這兩個參數包起來。）
 
 ### 7.3 時間處理規則
@@ -294,11 +293,11 @@ aggregate 用手寫 mapping，但事件是通用結構，不可能每個都手�
   {
     "eventId": "…", "eventName": "YourAggregateVoided", "eventVersion": 1,
     "organizationId": "…", "occurredAt": "2026-10-17T02:00:00.000Z",
-    "data": { "yourAggregateId": "…" }
+    "data": { "reason": "…" }
   }
   ```
 
-  欄位用 camelCase；trace context 透過 message header 傳遞（見第 12.1 節），不放在 body。
+  欄位用 camelCase；trace context 透過 message header 傳遞（見第 12.1 節），不放在 body。`data` 只包含事件類別自己宣告的欄位；`DomainEvent` 的基礎欄位（含 `aggregate_id`、`aggregate_type`）不會放進 `data`，信封也沒有 aggregate 欄位，consumer 需要 aggregate id 時由事件明確宣告該欄位。
 - **`organizationId` 取自發出事件的 aggregate**，不取自 context（第 10.2 節）。`tenant_scope = "global"` 的 aggregate 發出的事件，`organizationId` 為 `null`。
 - **接收的 MQ 訊息**在 port 層用 `MessageModel` 驗證（第 7.1 節，忽略未知欄位）。`organizationId` 欄位必須存在：缺少欄位的訊息直接拒絕，送進 DLQ（第 11 節）；值為 `null` 的全域事件，只有宣告接受全域事件的 subscriber 才會處理，而且 handler 呼叫的 controller 只能存取 `tenant_scope = "global"` 的 repository，或在 `system_context()` 中執行；沒有宣告的 subscriber 收到全域事件時直接 ack 並略過（不是錯誤，不送進 DLQ）。
 
@@ -524,14 +523,14 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
     { "index": 0, "status": 200, "data": { "id": "…", "etag": "\"3\"", "…": "…" } },
     { "index": 1, "status": 409, "error": {
         "type": "/problems/your_bounded_context.your_aggregate.already_voided",
-        "title": "Your aggregate is already voided", "status": 409,
+        "title": "Your aggregate already voided", "status": 409,
         "code": "your_bounded_context.your_aggregate.already_voided",
-        "params": { "yourAggregateId": "…" } } }
+        "params": { "yourAggregateId": "…", "voidedAt": "2026-10-17T02:00:00.000Z" } } }
   ] }
   ```
 
   - 單筆的 `status`：batch-create 成功為 201、附 `data`；batch-delete 成功為 204、不附 `data`；其他操作成功為 200、附 `data`。失敗時附 `error`。
-  - 全部成功、全部失敗都回 207；只有和個別資料無關的錯誤（驗證失敗、未認證、權限不足、超過筆數上限、鎖定逾時）才回對應的 4xx。
+  - 全部成功、全部失敗都回 207；只有和個別資料無關的錯誤才回對應的 4xx：Content-Type 不支援（415）、JSON 語法錯誤（400）、驗證失敗（含批次內重複 id、超過筆數上限，422）、某一筆 `etag` 不是單一 strong ETag（400）或為空字串（428）、未認證（401）、權限不足（403）、整批處理時鎖定逾時或 deadlock（409）。單筆的未預期錯誤（例如 event handler 失敗）在 207 中以 500 `server.internal_error` 表示。
   - 207 定義在 RFC 4918 §11.1（WebDAV），該 RFC 規定的 body 是 XML 的 `multistatus`；這裡的 JSON body 是 Zalando 採用的慣例，不是 RFC 4918 規定的格式。
 - 每個 response（包括 problem+json 和 207 的結果）都要在 OpenAPI 上宣告 model。
 
@@ -569,7 +568,7 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 實作要點：
 
 - FastAPI 預設對 JSON 語法錯誤回 422（`json_invalid`），kernel 的 exception handler 要改成 400。
-- FastAPI 對 Content-Type 不是 JSON 的請求（例如 `text/plain` 或沒有 Content-Type）回 422 `model_attributes_type`，不會回 415（已實測）。kernel 在 unit-of-work middleware 中檢查：有 body 的請求，Content-Type 不是 `application/json` 時回 415 `request.unsupported_media_type`。
+- FastAPI 對 Content-Type 不是 JSON 的請求（例如 `text/plain` 或沒有 Content-Type）回 422 `model_attributes_type`，不會回 415（已實測）。kernel 在 unit-of-work middleware 中檢查：POST、PUT、PATCH 且有 body 的請求，Content-Type 不是 `application/json` 時回 415 `request.unsupported_media_type`；這個檢查早於 JWT 驗證，public path 也適用（已實測）。
 - 409 和 422 的分界：同一個請求在資源處於其他狀態時可能成功 → 409；不論資源狀態如何都不會成功 → 422。
 - domain 層不知道 HTTP。`fast_ddd` 的 `DomainError` 帶一個 `ErrorKind`（`INVALID`、`CONFLICT`、`NOT_FOUND`、`ALREADY_EXISTS`、`PRECONDITION_FAILED`），由 `fast_ddd_port` 對應到 422／409／404／409／412。`PRECONDITION_FAILED` 用於 `expected_version` 不符，錯誤代碼為 `concurrency.etag_mismatch`。
 - IntegrityError 由 adapter 依 constraint 名稱轉成 `DomainError`（第 8.2 節）：主鍵重複 → `ALREADY_EXISTS`（409；`RepositoryBase` 在類別定義時自動登記 `pk_<table>`）；其他 unique 或 foreign key → 服務以 `register_constraint_error("<constraint 名稱>", ErrorClass)` 登記的錯誤（例如參考服務的 `uq_billing_invoice_organization_id_number` → `billing.invoice.number_taken`）；無法對應的 → 500。port 層只處理 `DomainError`，不認識 IntegrityError。
@@ -604,9 +603,9 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 
 {
   "type": "/problems/your_bounded_context.your_aggregate.already_voided",
-  "title": "Your aggregate is already voided",
+  "title": "Your aggregate already voided",
   "status": 409,
-  "detail": "Your aggregate 0b6f… was voided at 2026-10-17T02:00:00Z",
+  "detail": "Your aggregate 0b6f… was voided at 2026-10-17T02:00:00.000Z",
   "code": "your_bounded_context.your_aggregate.already_voided",
   "params": { "yourAggregateId": "0b6f…", "voidedAt": "2026-10-17T02:00:00.000Z" },
   "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -649,7 +648,7 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 **錯誤代碼的定義方式**：
 
 - domain 錯誤在 core 以 `DomainError` 的子類別定義，宣告 `code`、`kind`、英文訊息範本，以及 params 的欄位（以 dataclass 欄位宣告，pyright 可以檢查）。類別以它拒絕的業務規則命名，不加 `Error` 後綴（例如 `InvoiceAlreadyVoided`；ruff 的 N818 因此關閉），`title` 由類別名稱產生（`Invoice already voided`），同一個代碼的 `title` 因此固定不變。
-- kernel 提供 `make error-catalog`，輸出所有錯誤代碼、對應的 status、params key 和英文預設訊息（JSON），作為前端翻譯檔的來源。OpenAPI 上的 problem+json 只宣告共用的 schema，不逐一列出每個 endpoint 可能的錯誤代碼（v1 不做，見第 17 節）。
+- kernel 提供 `make error-catalog`，輸出所有錯誤代碼、對應的 status、英文 `title`、params key，以及 `DomainError` 子類別的英文訊息範本（JSON；kernel 共用代碼與自動產生的 `not_found`／`already_exists` 只有 `title`），作為前端翻譯檔的來源。OpenAPI 上的 problem+json 只宣告共用的 schema，不逐一列出每個 endpoint 可能的錯誤代碼（v1 不做，見第 17 節）。
 - 測試：錯誤代碼不重複、符合格式、英文訊息範本的佔位符和 params 欄位一致、每個 `DomainError` 子類別都有出現在目錄中。
 
 **穩定性**：
@@ -681,16 +680,17 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 - GET、建立、更新、domain 指令的回應都帶 `ETag` header；資源本身也包含 `etag` 欄位（同 Google AIP-154 的做法），讓列表和批次可以使用。body 中 `etag` 的字串和 header 的值完全相同（包含雙引號，例如 `"\"3\""`），前端可以直接放進 `If-Match`。
 - port 層把 `If-Match`／`etag` 轉成整數的 `expected_version` 交給 core；core 不認識 ETag。
 - **PATCH、DELETE 和 domain 指令必須帶 `If-Match`**：沒帶回 428，不符回 412。只接受單一的 strong ETag；`*`、多個值、weak ETag（`W/` 開頭）回 400 `concurrency.invalid_if_match`。
-- 批次的每一筆必須帶 `etag` 欄位（batch-create 除外，新建的資源還沒有 etag）：缺少時整個請求回 422；不符時該筆結果為 412。
+- 批次的每一筆必須帶 `etag` 欄位（batch-create 除外，新建的資源還沒有 etag）：缺少欄位時整個請求回 422；值為空字串時整個請求回 428；不是單一 strong ETag 時整個請求回 400 `concurrency.invalid_if_match`；不符時該筆結果為 412。
 - **檢查順序**（依 FastAPI 0.143 的實際執行順序訂定，已實測：body 的 JSON 解析早於 dependency；dependency 早於 body 的 schema 驗證）：
-  1. 認證（401），在 unit-of-work middleware 中；
-  2. Content-Type（415）和 JSON 語法（400）；
-  3. 權限（403），`require()` dependency；
-  4. 缺少 `If-Match`（428）或格式不接受（400），kernel 提供的 dependency；
-  5. request 的 schema 驗證（422）；
-  6. 載入資料，不存在或屬於其他組織（404）；
-  7. 比對 version（412）；
-  8. 執行 domain 方法（409／422）。
+  1. Content-Type（415），在 unit-of-work middleware 中，早於認證；
+  2. 認證（401），同在 unit-of-work middleware 中；之後才進行路由比對（路由不存在 404、method 不支援 405）；
+  3. JSON 語法（400）；
+  4. 權限（403），`require()` dependency；
+  5. 缺少 `If-Match`（428）或格式不接受（400），kernel 提供的 dependency；
+  6. request 的 schema 驗證（422）；
+  7. 載入資料，不存在或屬於其他組織（404）；
+  8. 比對 version（412）；
+  9. 執行 domain 方法（409／422）。
 
   依 RFC 9110 §13.2.1，回應本來就不是 2xx 時不評估前置條件，所以 404 優先於 412。
 - `If-Match` 的 dependency 把 header 宣告為選填（宣告為必填的話，FastAPI 會在缺少時回 422 而不是 428），再由 kernel 在產生 OpenAPI 時後處理 schema（`install_kernel` 掛上的 `install_openapi_fixups`），把 `If-Match` 標示為必填，前端產生的 client 才會要求帶這個 header。
@@ -757,7 +757,7 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 | API1 BOLA | `User` 有 `organization_id`，但 `RepositoryBase._load`／`_search` 都沒有用它過濾 | 見第 10.2 節 |
 | API3 BOPLA | request 由 dataclass-mixins 寬鬆建立；回應來自 entity 的通用轉換 | `RequestModel` 設 `extra="forbid"`，每個操作各自一個 model，body 不接受 `status`、`creator`、`doer`、`organizationId` 等欄位（create 的 `id` 例外，見第 9.9 節）；`ResponseModel` 明確列出可回傳的欄位 |
 | API4 資源消耗沒有上限 | `limit <= 0` 不設上限；匯出沒有筆數上限；批次沒有筆數上限 | `limit` 上限、批次筆數上限、`searchKey` 數量和長度上限、匯出筆數上限。FastAPI／Starlette 沒有內建的 request body 大小上限，由 reverse proxy 設定（413）；rate limit 由 gateway 處理（429 + `Retry-After`） |
-| API5 BFLA | 所有 endpoint 共用 `jwt: ['secret']` | 每個 endpoint 宣告自己需要的權限，例如 `Security(require("your_aggregate:void"))`；命名規則見第 10.3 節 |
+| API5 BFLA | 所有 endpoint 共用 `jwt: ['secret']` | 每個 endpoint 宣告自己需要的權限，例如 `dependencies=[require("your_aggregate:void")]`；命名規則見第 10.3 節 |
 | API8 錯誤訊息洩漏 | 批次失敗回傳 `str(e)` | 見第 9.5、9.6 節：例外對應到錯誤代碼，500 不回傳例外內容 |
 
 **部署假設**：服務前面有 reverse proxy 或 API gateway，負責 TLS、request body 大小上限和 rate limit。沒有 gateway 的部署方式必須另外補上這三項。
@@ -986,7 +986,7 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
   - 透過 progressive disclosure 載入各層的 reference，並引用 `references/example/` 中由參考服務產生的程式碼（路徑基準見第 15.2 節「路徑」）。
   - 規則：第 6 節的分層（包含第 6.4 節共用程式碼的位置）、第 7.3 節的時間處理、第 7.4 節的序列化、第 9.3 節的路由、第 9.5–9.6 節的 status code 和錯誤代碼、第 9.10 節的命名、第 10 節的資安。
   - **決策紀錄**（從程式碼讀不出來的部分，重寫參考服務時逐條補上）：共用程式碼放在哪一層（第 6.4 節）、事件紀錄為什麼要存 tracing、什麼時候該開啟 archive、什麼時候用 event handler 而不是直接呼叫 use case、`SessionProvider` 巢狀使用的規則（只有最外層可以 commit／rollback）、批次 use case 的寫法、什麼時候該寫 domain 指令而不是 PATCH、409 和 422 怎麼區分、什麼時候 repository 可以宣告 `tenant_scope = "global"`、為什麼 `organization_id` 取自 aggregate 而不是 context。
-  - 第一步執行 kernel 版本檢查：由 template 追蹤的檢查指令比對 SKILL.md 渲染的 `kernel_version`（該 template revision 對應的版本，第 3 節）與 lock 中 `fast-ddd-kernel` 的版本，以 exit code 判定，不修改任何檔案。standalone 服務讀服務根目錄的 `uv.lock`；workspace 模式（框架的 `example/`）沒有自己的 lock，讀框架根目錄的 `uv.lock`。不一致時（例如只執行了 `copier update` 卻沒有升級 kernel，或反過來）skill 立即停止，並指向升級說明（第 15.1 節）。同一個指令也納入服務的 `make check`，沒有 agent 參與時，CI 一樣會擋下不一致的狀態（第 2 節原則 3）。
+  - 第一步執行 kernel 版本檢查：由 template 追蹤的檢查指令比對 SKILL.md 渲染的 `kernel_version`（該 template revision 對應的版本，第 3 節）與 lock 中 `fast-ddd-kernel` 的版本，以 exit code 判定，失敗時以固定的訊息前綴列出兩邊的值，不修改任何檔案。skill 經由 `make kernel-version` 執行，`make` 在 recipe 失敗時一律以 exit 2 結束，所以 skill 以訊息前綴區分版本不一致與檢查無法執行。standalone 服務讀服務根目錄的 `uv.lock`；workspace 模式（框架的 `example/`）沒有自己的 lock，讀框架根目錄的 `uv.lock`。不一致時（例如只執行了 `copier update` 卻沒有升級 kernel，或反過來）skill 立即停止，並指向升級說明（第 15.1 節）。同一個指令也納入服務的 `make check`，沒有 agent 參與時，CI 一樣會擋下不一致的狀態（第 2 節原則 3）。
   - **機密保護設定**（每台機器、每個 host 執行一次）：辨識目前的 host 與版本，查閱該 host 當下的官方文件，不依賴記憶中的設定鍵；提出使用者層級的設定變更，目標是不讀取 `.env*`、金鑰與憑證檔案，子程序環境不含 `DATABASE_URL`、`RABBITMQ_URL` 等含機密的變數；經使用者核准後套用。套用後以探測指令驗證（讀取 `.env`、印出環境變數），再執行 `make check` 確認保護沒有讓品質檢查失敗，最後回報剩餘缺口。不寫入 managed 設定，也不修改 repo 內的檔案。這個工作流程沒有自動測試（第 2 節原則 3 的例外）。
 - **`fast-ddd-init`**（只能由使用者手動呼叫，三家的設定方式見第 15.2 節）：以 git URL 和 plugin 版本對應的 tag 執行 copier 建立服務骨架，不以 plugin 快取目錄作為 template 來源。建立後提示使用者在新服務中執行機密保護設定：新服務的 skill 要在該目錄開啟的 session 中才會載入。
 - frontmatter 只用三家共通的 `name` 和 `description`，只有 `fast-ddd-init` 另加手動觸發的設定；skill 的正確性不能依賴任何單一 host 專屬的欄位或語法（第 15.2 節）。
@@ -1071,9 +1071,10 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
   - MQ consumer 的 `app/port/message_queue/customer/` 與對外 client 的 `app/adapter/notification/`；
   - 新增 bounded context 時要登記的 `app/wiring.py`、`app/adapter/repository/models.py`、`app/adapter/resources.py`、`app/settings.py`；
   - billing 的 migration；
-  - 對應的測試，以及 `tests/conftest.py`、`tests/support.py`、`tests/port/conftest.py`。
+  - 對應的測試，以及 `tests/conftest.py`、`tests/support.py`、`tests/port/conftest.py`、`tests/test_error_catalog.py`；
+  - 新增第一個 bounded context 時需要、template 沒有的中介 package `__init__.py`（`app/adapter/controller/`、`app/adapter/event_handler/`、`app/port/message_queue/`、`app/port/restful/`、`app/port/task/`、`tests/core/`）。
 
-  CI 比對副本與來源一致，做法和 recopy drift 檢查相同：來源修改後沒有重新產生、副本出現清單外的檔案、來源刪除後副本仍保留舊檔，都要失敗。同步分兩段：腳本把 example 複製到 template，再以 recopy 同步回 example；新路徑以 `make template-ownership` 登記進 `scripts/template-ownership.json`。副本不含 `.agents/`，recopy 到 example 時不會遞迴複製。template 的 `ruff.toml` 以 `extend-exclude` 排除 `.agents`：服務的 `make check` 執行 `ruff check .`，ruff 預設不排除 `.agents`（2026-10-20 實測），服務自訂 ruff 設定後會在 template 追蹤的參考檔案上失敗；pyright、pytest、coverage 與 import-linter 的範圍本來就不含 `.agents`。
+  CI 比對副本與來源一致，做法和 recopy drift 檢查相同：來源修改後沒有重新產生、副本出現清單外的檔案、來源刪除後副本仍保留舊檔，或清單項目在 example 找不到，都要失敗。清單與比對由 `scripts/check_template.py` 承擔。`make template-references` 一次完成同步：在暫存目錄產生副本後整批替換、移除 example 內的舊副本並 recopy，再把新路徑登記進 `scripts/template-ownership.json`；它和 recopy 一樣會覆寫 example 中 template 追蹤檔的未提交修改，中途失敗時重跑即可。副本不含 `.agents/`，recopy 到 example 時不會遞迴複製。template 的 `ruff.toml` 以 `extend-exclude` 排除 `.agents`：服務的 `make check` 執行 `ruff check .`，ruff 預設不排除 `.agents`（2026-10-20 實測），服務自訂 ruff 設定後會在 template 追蹤的參考檔案上失敗；pyright、pytest、coverage 與 import-linter 的範圍本來就不含 `.agents`。
 - **不採用的做法**：
   - 在專案設定鎖定 plugin 版本（類似 pyenv）：Claude 可以在 `extraKnownMarketplaces` 指定 `ref`，但 marketplace 的 clone 在使用者層級每個名稱只有一份，切換專案時會改指向另一個 ref，實測鎖定 v1 的專案安裝到 2.0.0；Codex 每個 plugin 只保留一個版本，實測專案 B 升級後專案 A 也變成 2.0.0；agy 沒有版本選擇。
   - 全域的薄 skill 在執行時依服務的版本下載內容到快取：三家的 sandbox 都會擋。Codex 實測寫入 `~/.cache` 與網路存取都被拒絕；agy 的 headless 模式拒絕讀取 workspace 之外的檔案；Claude 讀取 workspace 之外的檔案需要核准。
@@ -1093,7 +1094,7 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 
 #### Skill 內容的可攜規則
 
-- **路徑**：服務內的 `fast-ddd` 以相對於 SKILL.md 的路徑讀 `references/...`；`fast-ddd-init` 不讀任何檔案，版本與來源寫在 SKILL.md（見下方原因與第 15.2 節「版本一致性」）。`${CLAUDE_PLUGIN_ROOT}`、`${CLAUDE_SKILL_DIR}` 只有 Claude 會展開；Codex 不替換 SKILL.md 的內容，`PLUGIN_ROOT` 只以環境變數提供給 hooks；agy 安裝時逐 byte 複製 SKILL.md，載入時也不替換（實測模型讀到的是字面文字）。agy 已實測能依 SKILL.md 的位置讀到 plugin 內與 repo 內 skill 的相對路徑檔案；但以 plugin 的 slash command 手動呼叫時（agy 1.4.2，`/fast-ddd:fast-ddd-init`，2026-10-19），模型沒有取得 skill 目錄（由行為推得：它改用 `find` 搜尋 `copier.yml` 並從多個候選中挑選），而框架 repo 的 checkout、測試 fixture 與各 host 的安裝目錄（agy、Codex 的安裝目錄本身也是 git clone）結構相同，無法可靠地辨認 plugin 自己的檔案。因此 `fast-ddd-init` 不以檔案定位取得版本與來源。服務內的 `fast-ddd` 先依前置實測確認相對於 SKILL.md 的路徑；任一家的自動觸發或手動呼叫（包括 agy 的 `/fast-ddd`）不成立時，改為相對於服務根目錄（含 `.copier-answers.yml` 的目錄）的路徑，並修訂本項規則。`fast-ddd` 在服務內的位置固定為 `.agents/skills/fast-ddd/`，服務根目錄可以辨認，這點和 plugin 的安裝目錄不同。
+- **路徑**：服務內的 `fast-ddd` 以相對於 SKILL.md 的路徑讀 `references/...`；`fast-ddd-init` 不讀任何檔案，版本與來源寫在 SKILL.md（見下方原因與第 15.2 節「版本一致性」）。`${CLAUDE_PLUGIN_ROOT}`、`${CLAUDE_SKILL_DIR}` 只有 Claude 會展開；Codex 不替換 SKILL.md 的內容，`PLUGIN_ROOT` 只以環境變數提供給 hooks；agy 安裝時逐 byte 複製 SKILL.md，載入時也不替換（實測模型讀到的是字面文字）。agy 已實測能依 SKILL.md 的位置讀到 plugin 內與 repo 內 skill 的相對路徑檔案；但以 plugin 的 slash command 手動呼叫時（agy 1.4.2，`/fast-ddd:fast-ddd-init`，2026-10-19），模型沒有取得 skill 目錄（由行為推得：它改用 `find` 搜尋 `copier.yml` 並從多個候選中挑選），而框架 repo 的 checkout、測試 fixture 與各 host 的安裝目錄（agy、Codex 的安裝目錄本身也是 git clone）結構相同，無法可靠地辨認 plugin 自己的檔案。因此 `fast-ddd-init` 不以檔案定位取得版本與來源。服務內的 `fast-ddd` 以相對於 SKILL.md 的路徑讀 `references/`：前置實測確認三家的自動觸發與手動呼叫（包括 agy 的 `/fast-ddd`）都成立（見「驗收與前置實測」）。日後某家不成立時，改為相對於服務根目錄（含 `.copier-answers.yml` 的目錄）的路徑：`fast-ddd` 在服務內的位置固定為 `.agents/skills/fast-ddd/`，服務根目錄可以辨認，這點和 plugin 的安裝目錄不同。
 - **frontmatter**：`name` 和 `description` 必填（Codex 要求 `name`，agy 的文件只列出這兩個欄位）。Claude 專屬的欄位和語法（`allowed-tools`、`context`、`paths`、`$ARGUMENTS`、`` !`cmd` ``）在其他 host 會被靜默忽略，所以不使用。
 - **手動觸發（`fast-ddd-init`）**：Claude 設 `disable-model-invocation: true`；Codex 在 `skills/fast-ddd-init/agents/openai.yaml` 設 `policy.allow_implicit_invocation: false`（Codex 忽略 `disable-model-invocation`）；agy 1.4.2 實測會遵守 `disable-model-invocation`：設定後 skill 不出現在模型可用的清單中，使用者仍可手動呼叫（plugin 的 skill 為 `/<plugin>:<skill>`，即 `/fast-ddd:fast-ddd-init`）。agy 的 `disable-slash-command` 作用相反（從 `/` 隱藏但仍可被模型觸發），不可使用。不論是哪一家，`fast-ddd-init` 執行 copier 前都必須先向使用者確認服務名稱和目的地目錄。
 
@@ -1123,13 +1124,11 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 
 #### 驗收與前置實測
 
-前置實測（結果寫回本節後才開始撰寫 skill）：
+前置實測（結果寫回本節後才開始撰寫 skill）。2026-10-20 以只含 `references/probe.md` 探測檔的暫時 skill，在隔離 home 實測三家 host（Claude Code 2.1.304、Codex 0.163.0、agy 1.4.2），三項都成立，服務內的 `fast-ddd` 沿用相對於 SKILL.md 的路徑：
 
-1. Codex 的 agent session 會載入服務 repo 的 `.agents/skills`，並能依 SKILL.md 的位置讀取 `references/` 下的檔案。服務內的 `.agents/skills` 是實體目錄，Codex 不讀 `.claude/skills`，不涉及 symlink。目前只有文件與原始碼的證據，需要在隔離的 `CODEX_HOME` 登入後實測。
-2. Claude 能依 SKILL.md 的位置讀取 plugin 與服務內 skill 的相對路徑檔案。plugin 端已實測（2026-10-19，Claude Code 2.1.303，隔離 `CLAUDE_CONFIG_DIR`）：手動呼叫 `fast-ddd-init` 時，skill 的 base directory 為 plugin 的 `skills/fast-ddd-init`，`../../copier.yml` 解析為 plugin 根目錄的 `copier.yml`。agy 的 slash command 呼叫取得不到 skill 目錄（見「路徑」），所以 `fast-ddd-init` 最後改為不讀檔案；本項結果仍適用於服務內 skill 的 `references/`，服務內 skill 經由 `.claude/skills` symlink 載入時的相對路徑與第 1 項仍未實測，留待主 skill 的 issue（#6）。
-3. agy 以 `/fast-ddd` 手動呼叫服務內 skill 時，能依 SKILL.md 的位置讀取 `references/` 下的檔案。自動觸發已實測可以；plugin skill 以 slash command 呼叫時取得不到 skill 目錄（見「路徑」），repo 層級 skill 的手動呼叫尚未實測。
-
-三項中任一項不成立時，依「路徑」改用服務根目錄，再撰寫 skill。
+1. Codex（隔離 `CODEX_HOME`，未設定 trusted project）：從服務 repo 的子目錄自動觸發，與以 `$fast-ddd` 手動呼叫，都載入 repo 根目錄的 `.agents/skills/fast-ddd`，並依 SKILL.md 的位置讀到 `references/probe.md`。服務內的 `.agents/skills` 是實體目錄，Codex 不讀 `.claude/skills`，不涉及 symlink。
+2. Claude（隔離 `CLAUDE_CONFIG_DIR`）：服務內 skill 經 `.claude/skills` symlink 載入，從子目錄自動觸發與以 `/fast-ddd` 手動呼叫，都依 SKILL.md 的位置讀到 `references/probe.md`（讀取路徑為 `.claude/skills/fast-ddd/references/probe.md`）。plugin 端的結果（2026-10-19，Claude Code 2.1.303）：手動呼叫 `fast-ddd-init` 時，skill 的 base directory 為 plugin 的 `skills/fast-ddd-init`；`fast-ddd-init` 後來因 agy 的 plugin slash command 取得不到 skill 目錄而改為不讀檔案（見「路徑」）。
+3. agy（隔離 `HOME`，print mode）：以 `/fast-ddd` 手動呼叫與自動觸發，都直接讀取 `.agents/skills/fast-ddd/references/probe.md`，沒有搜尋檔案；repo 層級 skill 不受 plugin slash command 取得不到 skill 目錄的限制影響。
 
 以下驗收中，版本一致性檢查、manifest 與 SKILL.md frontmatter 的 contract test、`kernel_version` 不持久化與服務版本檢查指令的測試、參考程式碼一致性檢查、kernel 測試和 recipe 驗證納入 repo CI；三家 host 的 plugin validate 與安裝需要 host CLI，端到端需要各家 agent 登入，兩者都以手動執行並在 PR 中記錄結果。機密保護的工作流程不列入驗收（第 2 節原則 3 的例外）。
 

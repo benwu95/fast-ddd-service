@@ -32,13 +32,13 @@
 
 ## Completion
 
-- **Tasks**: 26/26 code tasks（100%）；[V] T28 完成；[M] T29（三家 host 端到端）未執行，依使用者決定延後，於 PR 標示待辦。
-- **Acceptance Criteria**: 7/7 REQ 的自動化部分成立；REQ-TEMPLATE-009 與 011 的三家 host 手動部分（US-1.4、US-3.4）未驗收。
+- **Tasks**: 26/26 code tasks（100%）；[V] T28 完成；[M] T29（三家 host 端到端）在 verify 與 archive 時未執行，依使用者決定延後；2026-10-21 於 PR #10 完成：Claude Code 2.1.304、Codex 0.163.0、agy 1.4.3 皆以 `fast-ddd-init` 建立服務，版本不一致時停在 Step 1 且不修改檔案，以未指名 skill 的 prompt 新增 bounded context 後 `make check` 通過（agy 的 bounded context 由使用者確認，未獨立重跑）。過程中發現 autogenerate migration 缺少 kernel 型別的 import，屬既有 template／kernel 問題，另開 #11。
+- **Acceptance Criteria**: 7/7 REQ 成立；REQ-TEMPLATE-009 與 011 的三家 host 手動部分（US-1.4、US-3.4）於 T29 驗收。
 
 ## Review & Verify
 
 - **Review**: 5 輪（第 1 個 loop 4 輪、第 2 個 loop 1 輪），5 critical／6 major／7 minor。critical 為 skill 以 make 的 exit code 判斷版本不一致（C-1）、失敗訊息未列兩邊版本（C-3）、機密探測會印出值（S-1）、允許在 repo 建 `.env`（S-2）、操作文件宣稱覆寫版本會在 update 還原（C-2），皆經獨立 verifier 確認並以 fail-then-pass 測試鎖定。round 3 後全面掃描同類問題，修正 61 處 skill 與 design 文件的事實錯誤。未解：minor R5-1（archive 快照不含子資料表，`decisions.md:23` 與 design.md 第 7.5 節說法不精確），以 advisory 帶出。
-- **Verify**: Grade A；task-completion、knowledge、tests 為 PASS（`make check` exit 0：kernel 333、example 367 passed，template-check 無漂移）；delta-spec-compliance WARN（T29 未執行）；constitution PASS；design not-applicable。
+- **Verify**: Grade A；task-completion、knowledge、tests 為 PASS（`make check` exit 0：kernel 333、example 367 passed，template-check 無漂移）；delta-spec-compliance WARN（verify 時 T29 尚未執行）；constitution PASS；design not-applicable。
 - **Quality Log**: new-story INVEST WARN 3 則；plan verifier WARN 2 輪與收斂規則 WARN；tasks verifier FAIL→WARN；review 各輪 WARN、fix-induced breaker 兩次並以使用者 break-glass 繼續；prospec-delegation WARN（round 3 ticket 因 `.prospec.yaml` 修改，經使用者同意以目前工作樹結束）；verify WARN 1 則（T29）。另有兩筆過早寫入的 review round-close 紀錄（round 3 merge 前、round 4 escalation 後），後續已以正確 merge 與 round 5 的 baseline 取代。
 
 <!-- prospec:escalation-history -->

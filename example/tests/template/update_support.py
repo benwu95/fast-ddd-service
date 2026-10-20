@@ -44,6 +44,7 @@ def revision_service(
     shutil.copytree(
         generated_service,
         service,
+        symlinks=True,
         ignore=shutil.ignore_patterns(
             ".venv",
             "__pycache__",

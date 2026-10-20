@@ -1,0 +1,12 @@
+{
+  "name": "fast-ddd",
+  "description": "fast-ddd service scaffolding",
+  "owner": { "name": "benwu95" },
+  "plugins": [
+    {
+      "name": "fast-ddd",
+      "source": "./",
+      "description": "Create fast-ddd backend services from the copier template"
+    }
+  ]
+}

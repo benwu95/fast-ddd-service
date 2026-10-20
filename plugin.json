@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fast-ddd",
+  "version": "0.1.0",
+  "description": "Create fast-ddd backend services from the copier template",
+  "author": { "name": "benwu95" },
+  "repository": "https://github.com/benwu95/fast-ddd-service",
+  "license": "MIT"
+}

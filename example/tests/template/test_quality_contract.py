@@ -45,14 +45,9 @@ def test_quality_settings_follow_the_environment_and_empty_package_contract(
         "--no-cache",
     )
     assert "7 kept, 0 broken" in result.stdout
-    settings = json.loads((tmp_path / ".claude/settings.json").read_text())
-    assert {
-        "Read(**/.env*)",
-        "Read(**/*.pem)",
-        "Read(**/*.key)",
-        "Bash(env)",
-        "Bash(printenv *)",
-    } <= set(settings["permissions"]["deny"])
+    assert not (tmp_path / ".claude/settings.json").exists()
+    ignored = set((tmp_path / ".gitignore").read_text().splitlines())
+    assert {".env*", "*.pem", "*.key", "*.crt", "*.cer", "*.p12", "*.pfx"} <= ignored
 
 
 @pytest.mark.parametrize("minimum", [None, 80, 100])

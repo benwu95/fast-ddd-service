@@ -1,5 +1,7 @@
 [
+  ".agents/skills/fast-ddd/SKILL.md",
   ".claude/settings.json",
+  ".claude/skills",
   ".copier-answers.yml",
   ".coveragerc",
   ".dockerignore",

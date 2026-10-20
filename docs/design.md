@@ -53,12 +53,12 @@ fast-ddd-service/
   docs/
 ```
 
-- **plugin source 用 `"./"`**：整個 repo 就是 plugin，三家安裝時都複製整個 repo 根目錄。plugin 只提供 `fast-ddd-init`，以相對於 SKILL.md 的路徑讀取 `../../copier.yml`，不使用只有 Claude 會展開的 `${CLAUDE_PLUGIN_ROOT}`（第 15.2 節）。使用者只有我一個人，多複製一些檔案沒有影響。
+- **plugin source 用 `"./"`**：整個 repo 就是 plugin，三家安裝時都複製整個 repo 根目錄。plugin 只提供 `fast-ddd-init`，template 版本與來源直接寫在它的 SKILL.md，由版本一致性檢查約束，不讀取 plugin 內的其他檔案，也不使用只有 Claude 會展開的 `${CLAUDE_PLUGIN_ROOT}`（第 15.2 節）。使用者只有我一個人，多複製一些檔案沒有影響。
 - **開發 repo 與服務 repo 的邊界**：此 repo 集中維護 kernel、template 與單一參考服務 example；workspace 用於框架本身的開發與驗收，不是多個後端服務共置的交付模式。各服務 repo 分別安裝版本化 kernel，共用程式碼不代表共用執行中的 Runtime、connection 或 process。
 - **kernel 用 git tag 相依**：`fast-ddd-kernel @ git+https://github.com/benwu95/fast-ddd-service@vX.Y.Z#subdirectory=kernel`，不發布到 PyPI。
 - **kernel 來源與執行環境**：copier template 提供 `kernel_source`（`git`／`path`／`workspace`，預設 `git`）。一般服務用上述 git tag；本機整合測試用 `path`，由 `kernel_path` 指定 kernel 位置（預設 `../kernel`）。Phase 1 的 `example/` 實際使用 uv workspace，Phase 2 保留 `{ workspace = true }`，並在 `.copier-answers.yml` 記錄 `workspace`；此模式供 repo 內的參考服務使用。standalone 服務擁有自己的 `.venv` 與 `uv.lock`，不得複製 repo 根目錄的 workspace lock；Pyright 的 venv 位置依模式渲染，workspace 使用父目錄，standalone 使用服務目錄。三種來源模式都必須有明確的相依宣告與驗收。
 - **git tag 的版本號**：template 中的 kernel 版本是一個明確的常數（`copier.yml` 的 `kernel_version`，發布時和兩份 plugin manifest 的 `version` 一起調整），不使用 copier 的 `_commit` 變數。`_commit` 是 template 的 git describe 字串（例如 `v0.1.0-3-ga9258e4`），每個 commit 都不同，也不是有效的 kernel 版本；任何骨架檔案都不可以渲染 `{{ _commit }}`。
-- **版本**：plugin、kernel、template 共用同一個版本號和 git tag。`.claude-plugin/plugin.json`、根目錄 `plugin.json`、`copier.yml` 的 `kernel_version` 與 `kernel/pyproject.toml` 的 `version` 必須一致，由 `make check` 中的一致性檢查強制（第 15.2 節）。manifest 的 `version` 沒變時，Claude 已安裝的使用者不會收到 `fast-ddd-init` 的更新，Codex 也以 manifest 的版本作為快取目錄，所以發布時一定要同步調整。服務內的 `fast-ddd` 版本隨 template，由 `copier update` 升級。
+- **版本**：plugin、kernel、template 共用同一個版本號和 git tag。`.claude-plugin/plugin.json`、根目錄 `plugin.json`、`copier.yml` 的 `kernel_version`、`kernel/pyproject.toml` 的 `version` 與 `fast-ddd-init` SKILL.md 的 Template version 必須一致，由 `make check` 中的一致性檢查強制（第 15.2 節）。manifest 的 `version` 沒變時，Claude 已安裝的使用者不會收到 `fast-ddd-init` 的更新，Codex 也以 manifest 的版本作為快取目錄，所以發布時一定要同步調整。服務內的 `fast-ddd` 版本隨 template，由 `copier update` 升級。
 - **skill 的交付與版本**：`fast-ddd` 由 template 產生進服務 repo 的 `.agents/skills/`，`.claude/skills` 是指向它的 symlink。skill 只存在於 fast-ddd 服務中，版本隨 template，和其他 template 追蹤的檔案一起以 `copier update` 升級，不受使用者層級安裝的 plugin 版本影響；不採用在專案設定鎖定 plugin 版本或執行時依版本下載內容的做法，取捨見第 15.2 節。`fast-ddd-init` 在服務建立之前執行，只能由使用者層級安裝的 plugin 提供；它只用 plugin 自己的版本建立新服務，沒有版本錯配的問題。template 不寫入任何 plugin 宣告，新環境依 `template/docs/template-operations.md` 的指令手動安裝一次。
 - **機密檔案的保護**：設定和機密一律從環境變數讀取，不寫進任何會被 commit 的檔案（包括 pytest 設定）；kernel 的 `KernelSettings` 不自動載入 `.env`，template 的 `.gitignore` 排除 `.env*`、金鑰與憑證檔案。最主要的防線是機密不進入 agent 的環境：本機不放正式環境或共用的機密，啟動 agent 的 shell 不 export 機密，由開發者負責。template 不放任何 agent host 的權限設定（Phase 2 的 `.claude/settings.json` 移除）：三家官方都不把 deny 規則當主要防線，相關設定標示為 beta 或 preview、變動快，Claude 的遮罩設定與 agy 的權限規則也只能放在使用者層級。改由 skill 引導 agent 依自己 host 當下的官方文件提出使用者層級的設定變更，經使用者核准後套用並驗證（第 14.2 節）。
 - **template 和參考服務的關係**：Phase 1 先手寫 `example/`；Phase 2 從 `example/` 抽出 template。之後 CI 對 `example/` 執行 `copier recopy --overwrite --defaults --vcs-ref HEAD`（以 `.copier-answers.yml` 的答案、用目前這個 commit 的 template 重新產生骨架檔案），再用 `git diff --exit-code -- example ':(exclude)example/.copier-answers.yml'` 檢查 tracked files，並檢查 `git status --porcelain --untracked-files=all -- example`，確認沒有新增、刪除或修改的骨架檔案。answers 另外做結構化比對，只容許 `_commit` 改變；不能忽略其他答案漂移。`_commit` 必須獨立處理：copier 會把 template 的 commit 寫進 answers，而已 commit 的檔案不可能包含自己所在 commit 的 hash（已實測，copier 9.19）。必須加 `--vcs-ref HEAD`：不指定時 copier 會改用最新的 git tag（`copier recopy --help` 的說明），比對到的是上一次發布的 template。不用 `copier update` 做 drift 檢查：它是三方合併，會保留 `example/` 裡的手動修改，偵測不到骨架檔案被直接改動。完整驗收見第 15.1 節。
@@ -1013,7 +1013,7 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
 |---|---|---|
 | Phase 1：kernel + 參考服務 | 依第 6.1 節建立 kernel 的三個套件：搬移 `ddd_base`、repository／controller base（含修正後的 `SessionProvider` 和 `savepoint()`）；新增 `fast_ddd.context`、`RequestModel`／`ResponseModel`／`MessageModel`、`Timestamp`、`DecimalStr`、`TypeDecorator`、事件序列化工具、`BatchResult` 和批次 runner、IntegrityError 和鎖定錯誤的轉換、`DomainError` 和錯誤代碼處理、錯誤代碼目錄、SQL 語句計數器、JWT 驗證、tenant 隔離、權限 dependency、CORS、health、HTTP 的 unit-of-work middleware、tracing 整合、MQ 的 subscriber wrapper（ack／DLQ 設定和 inbox）、`TaskQueue` 介面、PgQueuer 實作和 task wrapper、選擇性開啟的 archive、domain_event 的新欄位。`example/` 手寫一個完整的 bounded context（預設 CRUD、void、batch-void、event handler、MQ consumer），以及 `app/settings.py`、`app/bootstrap.py`、`app/wiring.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`；參考 bounded context 加入一個由 event handler 排入的背景工作和一個 cron 排程 | `make check` 全部通過，包含 kernel 和 `example/` 的 import-linter contract；第 7.1 節的 contract test；第 8.3 節的往返次數、fallback、巢狀呼叫、`populate_existing`、`SessionProvider` 測試（使用 kernel 的測試用 aggregate）；500 回應帶有 CORS header 和 `X-Trace-Id` 的測試；第 9.3 節的路由測試；第 13 節規定的測試；kernel 的 archive 測試（預設不寫入快照，設定 `archive_model_class` 後才寫入）；並行測試（兩個請求同時執行時，事件的 trace id 和 parent event 不互相干擾）；CORS preflight 測試（POST、PATCH、DELETE）；第 11.1 節的背景工作測試，以及「透過 SQLAlchemy 的 asyncpg 連線在同一個 transaction 中排入工作」的實測 |
 | Phase 2：copier template | 依 Phase 1 實作抽出可獨立安裝、測試與更新的空服務；保留三個程序的 lifecycle，明訂 workspace／standalone 環境、檔案歸屬、migration 起點、測試骨架與更新責任。完整設計見第 15.1 節 | repo 外產生的服務以自己的 lock／venv 通過 `make check`；copy／update／recopy 與歸屬保護測試通過；非 editable 安裝與三個 entry points 的 smoke tests 通過；`example/` recopy 無骨架或答案漂移（只容許 `_commit` 改變），且 Phase 1 全部檢查持續通過 |
-| Phase 3：skill + 三家 plugin | 由 template 產生的 `fast-ddd`（含由 example 產生的參考程式碼與一致性檢查）、plugin 提供的 `fast-ddd-init`、recipe（export、其他批次操作、archive 快照、operation history、批次 event handler、即時推播、`app/lib`，和第 14.1 節的清單相同）、kernel 的即時推播元件（第 14.3 節）與批次 event handler（第 8.2 節）、三家的 manifest（`.claude-plugin/marketplace.json`、`.claude-plugin/plugin.json`、根目錄 `plugin.json`）、版本一致性檢查；template 移除 `.claude/settings.json`，加入 `.agents/skills` 與 `.claude/skills` symlink。完整設計見第 15.2 節 | `claude plugin validate` 與 `agy plugin validate --strict` 通過，Codex 從本機 marketplace 安裝成功；Claude、Codex、agy 各自由 `fast-ddd-init` 建立新服務，再由服務內的 `fast-ddd` 產生一個新的 bounded context，產出能通過 `make check`；即時推播與批次 event handler 的 kernel 測試通過。完整驗收見第 15.2 節 |
+| Phase 3：skill + 三家 plugin | 由 template 產生的 `fast-ddd`（含由 example 產生的參考程式碼與一致性檢查）、plugin 提供的 `fast-ddd-init`、recipe（export、其他批次操作、archive 快照、operation history、批次 event handler、即時推播、`app/lib`，和第 14.1 節的清單相同）、kernel 的即時推播元件（第 14.3 節）與批次 event handler（第 8.2 節）、三家的 manifest（`.claude-plugin/marketplace.json`、`.claude-plugin/plugin.json`、根目錄 `plugin.json`）、版本一致性檢查；template 移除 `.claude/settings.json`，加入 `.agents/skills` 與 `.claude/skills` symlink。完整設計見第 15.2 節 | `claude plugin validate` 與 `agy plugin validate` 通過（只容許根目錄開發指引不隨 plugin 載入的 warning：Claude 的 `CLAUDE.md`、agy 的 `AGENTS.md`），Codex 從本機 marketplace 安裝成功；Claude、Codex、agy 各自由 `fast-ddd-init` 建立新服務，再由服務內的 `fast-ddd` 產生一個新的 bounded context，產出能通過 `make check`；即時推播與批次 event handler 的 kernel 測試通過。完整驗收見第 15.2 節 |
 
 ### 15.1 Phase 2：copier template 詳細設計
 
@@ -1023,7 +1023,7 @@ Phase 1 已完成 kernel 與 billing 參考服務；目前 `example/` 的品質�
 
 | 歸屬 | 檔案與規則 |
 |---|---|
-| template 追蹤更新、服務可修改 | Dockerfile、`alembic.ini`、`alembic/env.py`、`alembic/script.py.mako`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、`pytest.ini`、`.coveragerc`、`.pre-commit-config.yaml`、Makefile、`.github/workflows/check.yml`、`.gitignore`、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`、`.claude/settings.json`（含第 3 節的 deny 清單），以及通用回歸測試 `tests/runtime/**`。產生後可直接客製化，不限於 copier answers；`copier update` 合併上游變更與本地修改，衝突由服務維護者處理，不能靜默覆蓋或視為已完成更新。工具設定預設保持獨立，不移入 `pyproject.toml`。 |
+| template 追蹤更新、服務可修改 | Dockerfile、`alembic.ini`、`alembic/env.py`、`alembic/script.py.mako`、`ruff.toml`、`pyrightconfig.json`、`.importlinter`、`pytest.ini`、`.coveragerc`、`.pre-commit-config.yaml`、Makefile、`.github/workflows/check.yml`、`.gitignore`、`app/bootstrap.py`、`app/main.py`、`app/consumer.py`、`app/task_worker.py`、`.agents/skills/**` 與 `.claude/skills` symlink（第 15.2 節），以及通用回歸測試 `tests/runtime/**`。產生後可直接客製化，不限於 copier answers；`copier update` 合併上游變更與本地修改，衝突由服務維護者處理，不能靜默覆蓋或視為已完成更新。template 退役的追蹤檔（Phase 2 的 `.claude/settings.json`）例外：copier 9.19.1 的 update 會刪除它，即使服務修改過也沒有衝突（2026-10-19 實測），由操作文件要求更新後檢查並從 checkpoint 還原。工具設定預設保持獨立，不移入 `pyproject.toml`。 |
 | 服務擁有、由 template 初始化 | `pyproject.toml`、`app/settings.py`、`app/wiring.py`、`app/adapter/resources.py`、`app/adapter/repository/models.py`、`tests/conftest.py`、`tests/support.py` 與 service branch 的 baseline migration。已存在的檔案透過 `_skip_if_exists` 保留；缺少時可能重新建立，不能將此規則解讀為刪除後也永不產生。baseline 不得在 example 既有 service branch 旁再建立第二個 root。 |
 | 服務擁有、由工具或業務開發產生 | `uv.lock`、後續 `alembic/versions/**`、業務程式碼與業務測試；template 不覆寫。首次 copy 後由服務執行 `uv lock`、`uv sync --frozen`，再執行 `make check`；lock 納入版本控制，不能由 template 複製 workspace lock。 |
 | copier 管理 | `.copier-answers.yml` 記錄來源、template revision 與支援的配置；由 copier 更新，CI 除 `_commit` 外核對所有答案。 |
@@ -1086,13 +1086,13 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 
 #### Skill 內容的可攜規則
 
-- **路徑**：plugin 與服務內的 skill 都以相對於 SKILL.md 的路徑引用檔案：`fast-ddd-init` 讀 `../../copier.yml`，`fast-ddd` 讀 `references/...`。`${CLAUDE_PLUGIN_ROOT}`、`${CLAUDE_SKILL_DIR}` 只有 Claude 會展開；Codex 不替換 SKILL.md 的內容，`PLUGIN_ROOT` 只以環境變數提供給 hooks；agy 安裝時逐 byte 複製 SKILL.md，載入時也不替換（實測模型讀到的是字面文字）。agy 已實測能依 SKILL.md 的位置讀到 plugin 內與 repo 內 skill 的相對路徑檔案。
+- **路徑**：服務內的 `fast-ddd` 以相對於 SKILL.md 的路徑讀 `references/...`；`fast-ddd-init` 不讀任何檔案，版本與來源寫在 SKILL.md（見下方原因與第 15.2 節「版本一致性」）。`${CLAUDE_PLUGIN_ROOT}`、`${CLAUDE_SKILL_DIR}` 只有 Claude 會展開；Codex 不替換 SKILL.md 的內容，`PLUGIN_ROOT` 只以環境變數提供給 hooks；agy 安裝時逐 byte 複製 SKILL.md，載入時也不替換（實測模型讀到的是字面文字）。agy 已實測能依 SKILL.md 的位置讀到 plugin 內與 repo 內 skill 的相對路徑檔案；但以 plugin 的 slash command 手動呼叫時（agy 1.4.2，`/fast-ddd:fast-ddd-init`，2026-10-19），模型沒有取得 skill 目錄（由行為推得：它改用 `find` 搜尋 `copier.yml` 並從多個候選中挑選），而框架 repo 的 checkout、測試 fixture 與各 host 的安裝目錄（agy、Codex 的安裝目錄本身也是 git clone）結構相同，無法可靠地辨認 plugin 自己的檔案。因此 `fast-ddd-init` 不以檔案定位取得版本與來源。
 - **frontmatter**：`name` 和 `description` 必填（Codex 要求 `name`，agy 的文件只列出這兩個欄位）。Claude 專屬的欄位和語法（`allowed-tools`、`context`、`paths`、`$ARGUMENTS`、`` !`cmd` ``）在其他 host 會被靜默忽略，所以不使用。
-- **手動觸發（`fast-ddd-init`）**：Claude 設 `disable-model-invocation: true`；Codex 在 `skills/fast-ddd-init/agents/openai.yaml` 設 `policy.allow_implicit_invocation: false`（Codex 忽略 `disable-model-invocation`）；agy 1.4.2 實測會遵守 `disable-model-invocation`：設定後 skill 不出現在模型可用的清單中，使用者仍可用 `/<skill>` 手動呼叫。agy 的 `disable-slash-command` 作用相反（從 `/` 隱藏但仍可被模型觸發），不可使用。不論是哪一家，`fast-ddd-init` 執行 copier 前都必須先向使用者確認服務名稱和目的地目錄。
+- **手動觸發（`fast-ddd-init`）**：Claude 設 `disable-model-invocation: true`；Codex 在 `skills/fast-ddd-init/agents/openai.yaml` 設 `policy.allow_implicit_invocation: false`（Codex 忽略 `disable-model-invocation`）；agy 1.4.2 實測會遵守 `disable-model-invocation`：設定後 skill 不出現在模型可用的清單中，使用者仍可手動呼叫（plugin 的 skill 為 `/<plugin>:<skill>`，即 `/fast-ddd:fast-ddd-init`）。agy 的 `disable-slash-command` 作用相反（從 `/` 隱藏但仍可被模型觸發），不可使用。不論是哪一家，`fast-ddd-init` 執行 copier 前都必須先向使用者確認服務名稱和目的地目錄。
 
 #### `fast-ddd-init` 的 copier 來源
 
-執行 `copier copy --vcs-ref v<version> https://github.com/benwu95/fast-ddd-service <目的地>`，`<version>` 讀 plugin 內 `copier.yml` 的 `kernel_version`（版本一致性檢查保證它等於 plugin 版本）。不用 plugin 快取目錄作為來源，原因（copier 9.19.1 實測）：
+執行 `copier copy --vcs-ref v<version> https://github.com/benwu95/fast-ddd-service <目的地>`，`<version>` 與來源 URL 寫在 SKILL.md 的「Template version」「Template source」（版本一致性檢查保證版本等於 plugin 版本，contract test 保證來源等於 `copier.yml` 的 `kernel_git_url` 預設值）。不用 plugin 快取目錄作為來源，原因（copier 9.19.1 實測）：
 
 - `_src_path` 照輸入記錄：絕對路徑記為絕對路徑，相對路徑依執行 `copier update` 的位置解析；
 - 來源路徑消失後 `copier update` 以 exit 1 失敗，而 copier 文件禁止手動修改 `.copier-answers.yml`；
@@ -1112,18 +1112,18 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 
 #### 版本一致性
 
-`.claude-plugin/plugin.json`、根目錄 `plugin.json`、`copier.yml` 的 `kernel_version`、`kernel/pyproject.toml` 的 `version` 四者必須相同。由一支附測試的檢查指令強制，納入 repo 根目錄的 `make check`；發布時確認 git tag 等於這個版本。服務內 skill 的版本由 template 渲染，不另外維護。
+`.claude-plugin/plugin.json`、根目錄 `plugin.json`、`copier.yml` 的 `kernel_version`、`kernel/pyproject.toml` 的 `version` 與 `skills/fast-ddd-init/SKILL.md` 的 Template version 五者必須相同。由一支附測試的檢查指令強制，納入 repo 根目錄的 `make check`；發布時確認 git tag 等於這個版本。服務內 skill 的版本由 template 渲染，不另外維護。
 
 #### 驗收與前置實測
 
 前置實測（結果寫回本節後才開始撰寫 skill）：
 
 1. Codex 的 agent session 會載入服務 repo 的 `.agents/skills`（包含經由 symlink 的情況），並能依 SKILL.md 的位置讀取 `references/` 下的檔案。目前只有文件與原始碼的證據，需要在隔離的 `CODEX_HOME` 登入後實測。
-2. Claude 能依 SKILL.md 的位置讀取 plugin 與服務內 skill 的相對路徑檔案（文件支援，未實測）。
+2. Claude 能依 SKILL.md 的位置讀取 plugin 與服務內 skill 的相對路徑檔案。plugin 端已實測（2026-10-19，Claude Code 2.1.303，隔離 `CLAUDE_CONFIG_DIR`）：手動呼叫 `fast-ddd-init` 時，skill 的 base directory 為 plugin 的 `skills/fast-ddd-init`，`../../copier.yml` 解析為 plugin 根目錄的 `copier.yml`。agy 的 slash command 呼叫取得不到 skill 目錄（見「路徑」），所以 `fast-ddd-init` 最後改為不讀檔案；本項結果仍適用於服務內 skill 的 `references/`，服務內 skill 的相對路徑與第 1 項仍未實測，留待主 skill 的 issue（#6）。
 
-以下驗收中，靜態檢查、kernel 測試和 recipe 驗證納入 repo CI；端到端需要各家 agent 登入，以手動執行並在 PR 中記錄結果。機密保護的工作流程不列入驗收（第 2 節原則 3 的例外）。
+以下驗收中，版本一致性檢查、manifest 與 SKILL.md frontmatter 的 contract test、參考程式碼一致性檢查、kernel 測試和 recipe 驗證納入 repo CI；三家 host 的 plugin validate 與安裝需要 host CLI，端到端需要各家 agent 登入，兩者都以手動執行並在 PR 中記錄結果。機密保護的工作流程不列入驗收（第 2 節原則 3 的例外）。
 
-1. **靜態**：`claude plugin validate` 和 `agy plugin validate --strict` 通過；Codex 在隔離的 `CODEX_HOME` 從本機 marketplace 安裝成功；版本一致性檢查和它的測試通過；參考程式碼副本與 example 一致。
+1. **靜態**：`claude plugin validate` 和 `agy plugin validate` 通過。兩家各有一則 warning，都是框架 repo 根目錄的開發指引刻意不隨 plugin 載入：Claude 的 `CLAUDE.md` 不載入為 project context，agy 的 `AGENTS.md` 不載入為 rule；agy 因此不用 `--strict`（2026-10-19 決定）；Codex 在隔離的 `CODEX_HOME` 從本機 marketplace 安裝成功；版本一致性檢查和它的測試通過；參考程式碼副本與 example 一致。
 2. **端到端（三家各一次）**：在隔離的 home 目錄從未發布的版本載入 plugin；由 `fast-ddd-init` 以隔離的本機 git fixture 和測試 tag 建立新服務（和第 15.1 節驗收第 1 項相同，不需要發布 tag），再在新服務中由 repo 層級的 `fast-ddd` 產生一個新的 bounded context。產出必須通過 `make check`，包含第 13 節規定的測試。
 3. **手動觸發**：三家都確認 `fast-ddd-init` 不會被模型自動觸發，且使用者可以手動呼叫。
 4. **版本檢查**：服務 `uv.lock` 中的 kernel 版本和 skill 渲染的版本不一致時，三家的 `fast-ddd` 都停止且不修改任何檔案。

@@ -26,7 +26,7 @@
 - `InvoiceIssued`／`InvoiceUpdated`／`InvoiceVoided`／`InvoiceDeleted` — billing events。
 
 ## Dependencies
-**Depends on:** `kernel` 提供共用機制；`template` 提供起始實作與漂移驗收；PostgreSQL、RabbitMQ 與 notification HTTP 服務。
+**Depends on:** `kernel` 提供共用機制；`template` 提供起始實作與漂移驗收；`plugin` 的 manifest 與 skill 由 `tests/template/` 的 contract test 驗證；PostgreSQL、RabbitMQ 與 notification HTTP 服務。
 **Used by:** 無內部 module；作為可執行參考服務。
 
 ## Modification Guide

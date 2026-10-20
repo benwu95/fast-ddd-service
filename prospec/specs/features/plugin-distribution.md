@@ -40,7 +40,7 @@ repo 本身就是 plugin，三家 host 以各自的 manifest 安裝同一份內�
 - WHEN 模型處理一般要求，THEN 不自動觸發 `fast-ddd-init`；使用者以 host 的手動方式呼叫時可執行。
 - WHEN 使用者呼叫 `fast-ddd-init`，THEN 先確認服務名稱與目的地，再以 SKILL.md 記載的 `v<version>` tag 與 git URL 建立服務，產物 answers 的 `_src_path` 為該 git URL；不依賴 host 提供 skill 目錄。
 - WHEN tag 不存在、git 認證或 host sandbox 阻擋、copier 失敗或目的地非空，THEN 停止並回報原因與前置需求，不改用其他 ref、來源或覆寫檔案。
-- WHEN 建立完成，THEN 提示在新服務中開啟 session 並執行機密保護設定。
+- WHEN 建立完成，THEN 提示在新服務中開啟 session，由服務內 `fast-ddd` 的機密保護工作流程設定 host。
 
 ---
 
@@ -89,4 +89,5 @@ repo 本身就是 plugin，三家 host 以各自的 manifest 安裝同一份內�
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-10-20 | add-fast-ddd-service-skill | MODIFIED REQ-PLUGIN-002 | REQ-PLUGIN-002 |
 | 2026-10-20 | ship-fast-ddd-init-plugin | 新增三家共用 plugin 交付與版本一致性規格 | REQ-PLUGIN-001, REQ-PLUGIN-002, REQ-PLUGIN-003 |

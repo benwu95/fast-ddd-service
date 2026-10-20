@@ -187,19 +187,19 @@ def test_non_revision_answer_drift_is_not_discarded(drift_repository: Path) -> N
     assert "unexpected_answer" not in _answers(drift_repository)
 
 
-def test_initialization_wiring_customization_survives_example_recopy(
+def test_initialization_customization_survives_example_recopy(
     drift_repository: Path,
 ) -> None:
-    wiring = drift_repository / "example/app/wiring.py"
-    wiring.write_text(wiring.read_text() + '\nSERVICE_WIRING = "preserve-initialization"\n')
+    project = drift_repository / "example/pyproject.toml"
+    project.write_text(project.read_text() + "\n# preserve-initialization\n")
     _commit(drift_repository)
     before = _answers(drift_repository)
-    customized = wiring.read_bytes()
+    customized = project.read_bytes()
 
     result = _check(drift_repository)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert wiring.read_bytes() == customized
+    assert project.read_bytes() == customized
     _assert_revision_only(drift_repository, before)
 
 
@@ -333,9 +333,9 @@ def test_upstream_deletion_reports_only_retired_skeleton_until_removed(
     original = generated.read_bytes()
     business = drift_repository / "example/app/core/local_business.py"
     business.write_text('LOCAL_BUSINESS = "preserve"\n')
-    wiring = drift_repository / "example/app/wiring.py"
-    wiring.write_text(wiring.read_text() + '\nLOCAL_WIRING = "preserve"\n')
-    protected = {path: path.read_bytes() for path in (business, wiring)}
+    project = drift_repository / "example/pyproject.toml"
+    project.write_text(project.read_text() + "\n# preserve\n")
+    protected = {path: path.read_bytes() for path in (business, project)}
     (drift_repository / "template/app/main.py").unlink()
     _commit(drift_repository)
 
@@ -436,17 +436,17 @@ def test_historical_ownership_respects_current_initialization_rules(
 ) -> None:
     ledger = drift_repository / "scripts/template-ownership.json"
     paths = json.loads(ledger.read_text())
-    ledger.write_text(json.dumps([*paths, "app/wiring.py"]))
-    wiring = drift_repository / "example/app/wiring.py"
-    wiring.write_text(wiring.read_text() + '\nLOCAL_WIRING = "preserve"\n')
-    original = wiring.read_bytes()
-    (drift_repository / "template/app/wiring.py").unlink()
+    ledger.write_text(json.dumps([*paths, "pyproject.toml"]))
+    project = drift_repository / "example/pyproject.toml"
+    project.write_text(project.read_text() + "\n# preserve\n")
+    original = project.read_bytes()
+    (drift_repository / "template/pyproject.toml.jinja").unlink()
     _commit(drift_repository)
 
     result = _check(drift_repository)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert wiring.read_bytes() == original
+    assert project.read_bytes() == original
 
 
 @pytest.mark.parametrize("mode", [(), ("--update-ownership",)])
@@ -515,3 +515,88 @@ def test_retired_file_replaced_by_generated_directory_is_synchronized(
     synchronized = _check(drift_repository)
 
     assert synchronized.returncode == 0, synchronized.stdout + synchronized.stderr
+
+
+REFERENCE_COPY = "template/.agents/skills/fast-ddd/references/example"
+
+
+def test_reference_copy_matches_example_sources(drift_repository: Path) -> None:
+    copy = drift_repository / REFERENCE_COPY
+    invoice = "app/core/billing/domain/invoice.py"
+    assert (copy / invoice).read_bytes() == (drift_repository / "example" / invoice).read_bytes()
+    assert (copy / "app/port/message_queue/customer/customer_subscriber.py").is_file()
+    assert (copy / "app/port/restful/__init__.py").is_file()
+    assert not (copy / ".agents").exists()
+    assert not (copy / "app/main.py").exists()
+
+
+def test_modified_reference_source_without_resync_is_reported(drift_repository: Path) -> None:
+    invoice = drift_repository / "example/app/core/billing/domain/invoice.py"
+    invoice.write_text(invoice.read_text() + '\nREFERENCE_DRIFT = "stale"\n')
+    _commit(drift_repository)
+
+    result = _check(drift_repository)
+
+    assert result.returncode != 0
+    assert "stale: app/core/billing/domain/invoice.py" in result.stdout
+
+
+def test_reference_copy_file_outside_the_list_is_reported(drift_repository: Path) -> None:
+    (drift_repository / REFERENCE_COPY / "app/extra.py").write_text("EXTRA = 1\n")
+    _commit(drift_repository)
+
+    result = _check(drift_repository)
+
+    assert result.returncode != 0
+    assert "extra: app/extra.py" in result.stdout
+
+
+def test_reference_entry_without_files_is_refused(drift_repository: Path) -> None:
+    shutil.rmtree(drift_repository / "example/app/adapter/notification")
+    _commit(drift_repository)
+
+    result = _check(drift_repository)
+
+    assert result.returncode != 0
+    assert "example/app/adapter/notification" in result.stderr
+
+
+def test_deleted_reference_source_is_reported_until_resynchronized(
+    drift_repository: Path,
+) -> None:
+    deleted = "tests/port/test_invoice_etag_limits.py"
+    (drift_repository / "example" / deleted).unlink()
+    _commit(drift_repository)
+
+    stale = _check(drift_repository)
+
+    assert stale.returncode != 0
+    assert f"extra: {deleted}" in stale.stdout
+
+    synchronized = _check(drift_repository, "--sync-references")
+
+    assert synchronized.returncode == 0, synchronized.stdout + synchronized.stderr
+    assert not (drift_repository / REFERENCE_COPY / deleted).exists()
+    assert not (
+        drift_repository / "example/.agents/skills/fast-ddd/references/example" / deleted
+    ).exists()
+    _commit(drift_repository)
+    result = _check(drift_repository)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reference_sync_is_idempotent(drift_repository: Path) -> None:
+    before = _tree_state(drift_repository)[3]
+
+    result = _check(drift_repository, "--sync-references")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    after = _tree_state(drift_repository)[3]
+    assert {name for name in after if name != "example/.copier-answers.yml"} == {
+        name for name in before if name != "example/.copier-answers.yml"
+    }
+    assert all(
+        after[name] == content
+        for name, content in before.items()
+        if name != "example/.copier-answers.yml"
+    )

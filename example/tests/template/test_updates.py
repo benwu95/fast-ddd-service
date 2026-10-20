@@ -5,7 +5,7 @@ import pytest
 import yaml
 from copier import run_copy
 
-from tests.template.support import git, run
+from tests.template.support import PYTHON_VERSION, git, run
 from tests.template.update_support import (
     INITIALIZATION_FILES,
     NEW_REVISION,
@@ -218,22 +218,48 @@ def test_intentionally_deleted_tracked_runtime_stays_deleted(
     assert "JWKS_TIMEOUT_SECONDS = 6.0" in (service / "app/main.py").read_text()
 
 
-def test_kernel_version_answer_does_not_upgrade_service_dependencies(
-    template_repository: Path, generated_service: Path, tmp_path: Path
+def test_template_update_renders_the_new_kernel_version_without_upgrading_dependencies(
+    template_repository: Path, tmp_path: Path
 ) -> None:
-    source, service = revision_service(template_repository, generated_service, tmp_path)
+    source, service = tmp_path / "source", tmp_path / "service"
+    git(tmp_path, "clone", "--quiet", str(template_repository), str(source))
+    replace_once(source / "copier.yml", "  default: 0.1.0\n  when: false\n", "  default: 0.1.0\n")
+    commit(source)
+    git(source, "tag", "v0.0.9")
+    run_copy(
+        str(source),
+        service,
+        defaults=True,
+        vcs_ref="v0.0.9",
+        quiet=True,
+        data={"kernel_source": "path", "kernel_path": str(source / "kernel")},
+    )
+    assert (
+        yaml.safe_load((service / ".copier-answers.yml").read_text())["kernel_version"] == "0.1.0"
+    )
+    run(service, "uv", "lock", "--python", PYTHON_VERSION, timeout=240)
+    git(service, "init", "-b", "main")
+    commit(service)
+    assert run(service, "make", "kernel-version", check=False).returncode == 0
     before = {name: (service / name).read_bytes() for name in ("pyproject.toml", "uv.lock")}
-    replace_once(source / "copier.yml", "default: 0.1.0", "default: 0.2.0")
+    replace_once(source / "copier.yml", "  default: 0.1.0\n", "  default: 0.2.0\n  when: false\n")
     publish_revision(source)
 
-    update_service(service, kernel_version="0.2.0")
+    update_service(service)
 
     answers = yaml.safe_load((service / ".copier-answers.yml").read_text())
-    assert answers["kernel_version"] == "0.2.0"
+    assert "kernel_version" not in answers
     assert answers["_commit"] == NEW_REVISION
+    skill = (service / ".agents/skills/fast-ddd/SKILL.md").read_text()
+    assert "- Kernel version: `0.2.0`\n" in skill
     for filename, content in before.items():
         assert (service / filename).read_bytes() == content, filename
     locked = tomllib.loads((service / "uv.lock").read_text())
     (kernel,) = [package for package in locked["package"] if package["name"] == "fast-ddd-kernel"]
     assert kernel["version"] == "0.1.0"
     run(service, "uv", "lock", "--check")
+    mismatch = run(service, "make", "kernel-version", check=False)
+    assert mismatch.returncode != 0
+    assert "fast-ddd kernel version check failed" in mismatch.stderr
+    assert "`0.2.0`" in mismatch.stderr
+    assert "`0.1.0`" in mismatch.stderr

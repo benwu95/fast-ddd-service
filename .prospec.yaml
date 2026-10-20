@@ -5,6 +5,7 @@ tech_stack:
   language: python
   package_manager: uv
   test_command: make check
+  test_timeout_ms: 1800000
   source: config
 paths:
   base_dir: prospec

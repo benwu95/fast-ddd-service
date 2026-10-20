@@ -51,7 +51,7 @@ def test_standalone_tools_run_from_the_service_root(
     template_repository: Path, tmp_path: Path
 ) -> None:
     run_copy(str(template_repository), tmp_path, defaults=True, vcs_ref="HEAD")
-    result = run(tmp_path, "make", "-n", "check", check=False)
+    result = run(tmp_path, "make", "--no-print-directory", "-n", "check", check=False)
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines()[0].endswith(
         "uv run --no-project --python 3.13 python -I "

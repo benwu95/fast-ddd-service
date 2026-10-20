@@ -86,11 +86,15 @@ prospec/
     modules/
       example/
       kernel/
+      plugin/
       template/
   specs/
     _archived-history/
     features/
 scripts/
+skills/
+  fast-ddd-init/
+    agents/
 template/
   alembic/
     versions/
@@ -120,9 +124,10 @@ template/
 > non-source ancestor, and both lists are ordered by file volume — a cap keeps the biggest, not the
 > alphabetically first.
 
-- `prospec/` — 28 files: `.md`, `.yaml`
+- `prospec/` — 30 files: `.md`, `.yaml`
 - `docs/` — 2 files: `.md`
 - `example/tests/typing_contracts/` — 2 files: `.txt`
+- `skills/` — 2 files: `.md`, `.yaml`
 - `example/docs/` — 1 file: `.md`
 - `template/docs/` — 1 file: `.md`
 
@@ -130,5 +135,5 @@ template/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 267 |
+| Total files | 276 |
 | Scan depth | 10 |

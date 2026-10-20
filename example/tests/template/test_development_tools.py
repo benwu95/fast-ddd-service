@@ -21,13 +21,14 @@ def test_framework_check_runs_template_tools_and_drift() -> None:
         "ruff check scripts template",
         "pyright --project example/pyrightconfig.json scripts",
         "pre-commit run check-merge-conflict --all-files",
+        "python scripts/check_versions.py",
         "coverage run -m pytest",
         "python scripts/check_template.py --snapshot",
     )
     positions = [
         [index for index, line in enumerate(commands) if line.endswith(gate)] for gate in gates
     ]
-    assert [len(found) for found in positions] == [1, 1, 1, 1, 2, 1]
+    assert [len(found) for found in positions] == [1, 1, 1, 1, 1, 2, 1]
     assert [index for found in positions for index in found] == sorted(
         index for found in positions for index in found
     )

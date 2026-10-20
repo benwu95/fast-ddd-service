@@ -1,5 +1,6 @@
 _min_copier_version: '9.19.1'
 _subdirectory: template
+_preserve_symlinks: true
 _skip_if_exists:
   - pyproject.toml
   - app/settings.py

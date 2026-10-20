@@ -2,6 +2,23 @@
 
 每個 microservice 使用獨立 repo。kernel 提供共用 DDD、adapter、port 與 devtools；產生的 bootstrap、entry points、wiring、工具設定與測試皆由服務擁有，可直接修改。hooks 與 Copier answers 是方便的起點，不限制客製化的位置。
 
+## 安裝 fast-ddd plugin
+
+`fast-ddd-init` 由 plugin 提供，在使用者層級安裝一次即可用於所有新服務。repo 為 private，先讓 Git 能以 HTTPS 認證存取（例如 `gh auth setup-git`）。
+
+```sh
+# Claude Code
+claude plugin marketplace add benwu95/fast-ddd-service
+claude plugin install fast-ddd@fast-ddd
+# Codex CLI
+codex plugin marketplace add benwu95/fast-ddd-service
+codex plugin add fast-ddd@fast-ddd
+# Antigravity CLI
+agy plugin install https://github.com/benwu95/fast-ddd-service
+```
+
+手動呼叫 `fast-ddd-init` 時，它以 plugin 版本對應的 `v<kernel_version>` tag 作為 `--vcs-ref`，執行與下方相同的 `copier copy`。服務內的 `fast-ddd` skill 位於 `.agents/skills/`，`.claude/skills` 是指向它的 symlink；兩者屬 template 追蹤、服務可修改，隨 `copier update` 更新。
+
 ## 建立服務與環境
 
 使用 Copier 9.19.1、uv 與 Python 3.13.12。Git 模式要求 `v<kernel_version>` tag 已存在；驗收使用的隔離 tag 不代表遠端已發布。template ref 與 kernel version 分開選擇，不使用 `_commit` 推導 kernel 版本。
@@ -98,6 +115,10 @@ make check
 Copier 可能在 exit 0 時留下衝突。必須檢視雙方內容、解決標記並 `git add`，確認 Git 沒有 unmerged paths，merge-conflict gate 與完整品質檢查皆通過後，才提交更新。runtime、工具與通用測試的修改由 Copier 合併；同一 hunk 的修改須由服務維護者處理。
 
 僅初始化的檔案為 `pyproject.toml`、`app/settings.py`、`app/wiring.py`、`app/adapter/resources.py`、`app/adapter/repository/models.py`、`tests/conftest.py`、`tests/support.py` 與既有 `alembic/versions/*`。存在時保留服務內容；刪除後若該路徑仍由 template 產生，就按新預設重建。baseline 關閉時不重建固定 baseline；後續 revisions、業務檔與 lock 保留。一般追蹤檔刻意刪除後，合併更新保留刪除。接線新增 required Settings 時，同步擴充服務擁有的 root test fixtures。
+
+template 退役的追蹤檔，update 會從服務刪除，即使服務修改過也不產生衝突。目前退役的檔案是 `.claude/settings.json`（Phase 2 產生的服務才有）。更新後以 `git status --short` 檢查 `D` 狀態；要保留時執行 `git restore --source "$CHECKPOINT" --staged --worktree -- .claude/settings.json`。
+
+`.claude/skills` 由 template 產生為 symlink。若服務已有同名的實體目錄，update 會失敗；更新前先把其中的 skill 移到 `.agents/skills/`，刪除該目錄並提交，再執行 update。
 
 template 更新不等於 kernel 已升級。保留自己的相依，手動修改 `pyproject.toml` 的 kernel Git tag 或 path，執行 `uv lock --upgrade-package fast-ddd-kernel`、`uv sync --frozen`、完整 `make check` 並檢視 lock diff。若更新 `kernel_version` 答案，同次明確傳入 `-d kernel_version=...`；答案改變不會替你改寫相依或 lock。
 

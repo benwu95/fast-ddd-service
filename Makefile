@@ -13,6 +13,7 @@ tooling:
 	$(UV) ruff check scripts template
 	$(UV) pyright --project example/pyrightconfig.json scripts
 	$(UV) pre-commit run check-merge-conflict --all-files
+	$(UV) python scripts/check_versions.py
 
 template-check:
 	$(UV) python scripts/check_template.py --snapshot

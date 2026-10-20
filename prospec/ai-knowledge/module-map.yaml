@@ -20,8 +20,9 @@ modules:
       depends_on:
         - kernel
         - template
+        - plugin
       used_by: []
-    last_verified: 2026-10-18T06:36:07.701Z
+    last_verified: 2026-10-20T03:09:02.708Z
   - name: kernel
     description: 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools
     paths:
@@ -76,4 +77,28 @@ modules:
         - kernel
       used_by:
         - example
-    last_verified: 2026-10-18T06:36:07.701Z
+        - plugin
+    last_verified: 2026-10-20T03:09:02.708Z
+  - name: plugin
+    description: 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 fast-ddd-init
+    paths:
+      - .claude-plugin/**
+      - plugin.json
+      - skills/**
+    keywords:
+      - fast-ddd-init
+      - marketplace
+      - plugin.json
+      - SKILL.md
+      - openai.yaml
+    aliases:
+      - 三家 plugin
+      - 建立服務
+      - 手動觸發
+    rationale: repo 根目錄即 plugin（source "./"），以三份 manifest 對應各 host，只暴露建立服務的 skill
+    relationships:
+      depends_on:
+        - template
+      used_by:
+        - example
+    last_verified: 2026-10-20T03:09:02.708Z

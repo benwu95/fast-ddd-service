@@ -1,4 +1,4 @@
-version: 2.8.0
+version: 2.9.0
 project:
   name: fast-ddd-service
 tech_stack:
@@ -6,7 +6,6 @@ tech_stack:
   package_manager: uv
   test_command: make check
   test_timeout_ms: 1800000
-  source: config
 paths:
   base_dir: prospec
 artifact_language: Traditional Chinese (Taiwan)
@@ -23,3 +22,131 @@ agents:
   - antigravity
 knowledge:
   base_path: prospec/ai-knowledge
+skill_triggers:
+  prospec-explore:
+    - 探索
+    - 比較
+    - 調查
+    - 不確定
+    - 釐清
+  prospec-new-story:
+    - 新功能
+    - 需求
+    - 使用者故事
+  prospec-plan:
+    - 規劃
+    - 架構
+    - 技術規劃
+  prospec-design:
+    - UI 規格
+    - 產生設計
+    - 擷取設計
+  prospec-tasks:
+    - 拆解
+    - 任務清單
+    - 工作項目
+    - 如何拆分
+  prospec-ff:
+    - 快轉
+    - 一次產生
+    - 一次完成
+  prospec-implement:
+    - 實作
+    - 開始寫程式
+    - 寫程式
+  prospec-review:
+    - 程式碼審查
+    - 對抗式審查
+    - 找 bug
+  prospec-verify:
+    - 驗證
+    - 稽核
+    - 品質檢查
+  prospec-knowledge-generate:
+    - 產生知識庫
+    - 分析專案
+    - 模組切分
+  prospec-archive:
+    - 封存
+    - 規格同步
+    - 完成變更
+  prospec-knowledge-update:
+    - 知識庫更新
+    - 增量更新
+    - 同步知識庫
+    - 更新文件
+  prospec-backfill-spec:
+    - 回填規格
+    - 從程式碼產生規格
+    - 既有專案
+    - 為既有程式碼補文件
+  prospec-promote-backfill:
+    - 提升回填
+    - 正式化回填
+    - 回填轉 delta-spec
+    - 提升草稿
+  prospec-learn:
+    - 學習
+    - 提升教訓
+    - 團隊手冊
+  prospec-quickstart:
+    - 快速開始
+    - 導入
+    - 初始化
+    - 開始使用
+  prospec-upgrade:
+    - 升級 prospec
+    - prospec 升級
+    - 遷移 prospec 版本
+skill_exclusions:
+  prospec-explore:
+    - 撰寫 Story
+    - 一般腦力激盪
+  prospec-new-story:
+    - 一般 issue 撰寫
+    - 草擬工單
+  prospec-plan:
+    - 臨時架構討論
+    - UI 設計
+  prospec-design:
+    - 架構設計
+    - API 設計
+  prospec-tasks:
+    - 一般待辦清單
+    - 個人任務追蹤
+  prospec-ff:
+    - 模糊的需求
+    - 需求探索
+  prospec-implement:
+    - 沒有 tasks.md 就寫程式
+    - 變更以外的快速修正
+  prospec-review:
+    - 臨時 PR 審查
+    - 一般程式碼評論
+  prospec-verify:
+    - 只執行測試
+    - 一般 QA
+  prospec-knowledge-generate:
+    - 增量知識庫更新
+    - 編輯單一 README
+  prospec-archive:
+    - git 標籤
+    - 發佈版本
+  prospec-knowledge-update:
+    - 首次產生知識庫
+    - 完整重新掃描
+  prospec-backfill-spec:
+    - 從設計工具擷取
+    - 撰寫新需求
+  prospec-promote-backfill:
+    - 擷取草稿
+    - 寫入信任區
+  prospec-learn:
+    - 一次性筆記
+    - 個人提醒
+  prospec-quickstart:
+    - 每次 session 使用
+    - 版本升級
+  prospec-upgrade:
+    - 首次導入
+    - 日常使用

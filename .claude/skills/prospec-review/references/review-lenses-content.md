@@ -75,6 +75,7 @@ Cite defects against authorization, sensitivity and preservation contracts; vali
 | N+1 query pattern (one query per item) — use a join/include | critical (scales to timeouts) |
 | List endpoints without pagination / unbounded fetch or loops | critical (memory exhaustion, DoS) |
 | Missing indexes on queried columns; blocking I/O on a hot path | major |
+| A change or its plan accepts a cost that grows with data volume (a missing index, a full scan, per-row queries) without production data volume — row counts, growth or total work at the run frequency — as its basis: ask for that data or a way to measure it. When another criterion here files the same cost, add the ask to that finding at the higher of the two severities; the ask never blocks the loop by itself or overturns a decision recorded in the plan | major |
 | Missing or misused caching (none → redundant work; over-use → stale data) | major / minor |
 | Frontend: missing code-splitting/lazy-loading; images without dimensions or responsive sizes; no `fetchpriority` on the LCP image | major (bundle / CLS / LCP) |
 | Unnecessary re-renders (new objects per render); `memo`/`useMemo` overuse | minor (measure first) |
@@ -82,7 +83,7 @@ Cite defects against authorization, sensitivity and preservation contracts; vali
 **Core Web Vitals targets** (good / poor): LCP ≤ 2.5s / > 4.0s · INP ≤ 200ms / > 500ms · CLS ≤ 0.1 / > 0.25.
 **Budget guides:** initial JS < 200KB gzipped · API p95 < 200ms · TTI < 3.5s on 4G · Lighthouse Perf ≥ 90.
 
-> Optimize only after measuring — flagging a "slow" path without a baseline is a minor, not a major.
+> Optimize only after measuring — flagging a "slow" path without a baseline, when no trade-off was decided, is a minor, not a major.
 
 ---
 
@@ -148,7 +149,7 @@ Applies when the change introduces or touches an invariant or a shared resolver 
 
 ## Test-Quality Lens
 
-Applies when the change adds or edits tests (esp. contract/structural assertions).
+Applies when the change adds, edits or removes tests (esp. contract/structural assertions), or edits test-gate configuration.
 
 | Criterion | Default severity |
 |-----------|------------------|
@@ -156,11 +157,14 @@ Applies when the change adds or edits tests (esp. contract/structural assertions
 | Content-presence asserted but **structural invariants** (item-set vs a version-controlled baseline, ordering, contiguity) and **negative assertions** for "must NOT appear" rules are missing — a "must NOT appear" rule pins the **set or structure** (item-set, closed enum, directory enumeration), never a keyword, whose coverage equals the author's vocabulary | major |
 | A new assertion class was never **mutation-verified** (delete/corrupt the asserted feature → the test must go red) | major (an unmutated assertion may be a tautology) |
 | An assertion passes **vacuously** — the slice, glob, or collection it inspects can be empty and the expectation still holds (`expect(found).not.toContain(x)` over an empty `found`) | major (the recurring shape: a mutation that makes extraction return nothing satisfies the test) |
+| An existing assertion is **weakened or deleted** without a basis (an exact check loosened to a negation or a range, an assertion or test case removed); the finding quotes the assertion before and after the change | critical |
+| A test **disable or focus marker** is added without a basis (`.skip`, `.only`, `xit`, `xdescribe` or the equivalent in the project's runner) | critical |
+| A **test gate is relaxed** without a basis — `tech_stack.test_command` narrowed, `test_evidence.exclude_knowledge` enabled, a test-runner exclude added, a lint suppression added, or a coverage threshold lowered | critical |
 
-> Applying the mutations that the **mutation-verified** criterion demands is the
-> reviewer's own work, so what the reviewer must write down about it — naming
-> each mutation and whether it turned the test red — is a **finding-content**
-> rule, not a criterion applied to the change. It lives in `review-format.md`
-> § review.md Format, and it is deliberately not a row here: a row carries a
-> severity, and severity is the weight of a finding raised **against the
-> change**, which leaves nothing to file it on.
+**Basis for a loosening.** The three loosening criteria hold only when the change carries no basis: a MODIFIED or REMOVED REQ in the change's delta-spec, a recorded acceptance amendment, or a reason stated in the proposal — written before the review loop, not by a review-round fix. Cite the basis by file and line. Only an acceptance amendment carries a record (`metadata.yaml` `acceptance.revisions`); whether a delta-spec REQ or a proposal reason predates the review is your judgment, since nothing records that moment. A rename or move that keeps behavior, or an assertion made stricter, is not a loosening. Never auto-fix a confirmed loosening: a restored assertion has no fail-then-pass pin and may turn the suite red, so escalate it to the developer with the restore as the proposed fix.
+
+> What the reviewer records about applying the **mutation-verified** criterion's
+> mutations — naming each and whether it turned the test red — is a
+> **finding-content** rule in `review-format.md` § review.md Format, not a row:
+> a row's severity weighs a finding against the change, and this rule has
+> nothing to file it on.

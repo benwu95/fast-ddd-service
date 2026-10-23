@@ -209,3 +209,15 @@ __marimo__/
 # Prospec local workflow artifacts
 .prospec/
 prospec-report.json
+# prospec:auto-start
+/.prospec/*
+/prospec-report.json
+!/.claude/skills/prospec-*/
+!/.claude/skills/prospec-*/references/
+!/.claude/skills/prospec-*/*.md
+!/.claude/skills/prospec-*/references/*.md
+!/.agents/skills/prospec-*/
+!/.agents/skills/prospec-*/references/
+!/.agents/skills/prospec-*/*.md
+!/.agents/skills/prospec-*/references/*.md
+# prospec:auto-end

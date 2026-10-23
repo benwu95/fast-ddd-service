@@ -12,7 +12,7 @@ HTTP model 以 snake_case 宣告、camelCase aliases 交換資料。MQ envelope 
 
 ## Code Patterns (Follow)
 
-workspace 使用 uv；`uv run --frozen` 依 `uv.lock` 執行。Python 版本至少 3.13；Ruff line length 100，Pyright strict，禁止藉 type-ignore 關閉檢查。
+workspace 使用 uv；`uv run --frozen` 依 `uv.lock` 執行。Python 版本至少 3.13；Ruff line length 100，Pyright strict 且零 error；`# type: ignore` 已停用，例外僅限 `# pyright: ignore[<rule>]`（見 Constitution）。
 
 分層為 port → adapter → core；core 不依賴 Pydantic、ORM 或入口框架。服務由 bootstrap／wiring 組裝；entry points 讀 settings，port 透過 controller 進入 use case。Repository 明訂 `tenant_scope`，自訂查詢沿用 `tenant_conditions()`。
 

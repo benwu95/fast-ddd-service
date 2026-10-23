@@ -63,6 +63,15 @@
 **Verify**: stations: all; 需求與規劃明訂各邊界的命名；contract tests 以真實 producer 輸出驗證 consumer 可接收多字與巢狀欄位，並確認任意 map key 保留原樣、Python 屬性與 domain_event body 維持 snake_case。
 
 ---
+### [MUST] Pyright strict 型別檢查
+
+**Description**: `kernel/`、`example/`、`scripts/` 與 template 產生之服務的 Python 程式碼（含測試）須通過 Pyright strict mode 且零 error。不得以降低 `typeCheckingMode`、檔案層級註解（如 `# pyright: basic`、`# pyright: reportXxx=false`）或將檔案移出檢查範圍（既有的 `alembic/versions` 產生檔除外）規避錯誤；`# type: ignore` 已由 `enableTypeIgnoreComments = false` 停用。確有必要的例外僅能使用限定 rule 的 `# pyright: ignore[<rule>]`，不得使用不帶 rule 的形式。
+
+**Rationale**: kernel 以型別作為 port、adapter 與 core 之間的 contract，下游服務依賴其型別資訊；strict 模式讓 contract 破壞在 `make check` 即被攔下，而非延到執行期。`kernel/pyproject.toml`、`example/pyrightconfig.json` 與 `template/pyrightconfig.json.jinja` 已一致採用此設定。
+
+**Verify**: stations: implement, review, verify; `make check` 的 pyright 步驟零 error；diff 未放寬上述 pyright 設定的 strict／ignore 相關欄位，未新增不帶 rule 的 `# pyright: ignore` 或檔案層級的規則關閉註解。
+
+---
 
 ## Quality Standards
 

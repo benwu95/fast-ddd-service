@@ -4,7 +4,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from fast_ddd_adapter.migrations import include_object
+from fast_ddd_adapter.migrations import include_object, render_item
 from fast_ddd_adapter.orm import Base
 from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -28,6 +28,7 @@ def run_migrations(connection: Connection) -> None:
         compare_type=True,
         compare_server_default=True,
         include_object=include_object,
+        render_item=render_item,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -47,6 +48,7 @@ if context.is_offline_mode():
         target_metadata=Base.metadata,
         literal_binds=True,
         include_object=include_object,
+        render_item=render_item,
     )
     with context.begin_transaction():
         context.run_migrations()

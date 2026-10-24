@@ -2,10 +2,14 @@ import os
 from argparse import Namespace
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from alembic import op
+from alembic.autogenerate.api import AutogenContext
 from alembic.config import CommandLine, Config
 from sqlalchemy.engine.interfaces import AdaptedConnection
+
+from fast_ddd_adapter.orm import UtcDateTime
 
 BRANCH_LABEL = "fast_ddd"
 
@@ -24,6 +28,19 @@ def include_object(
     """Alembic ``include_object``: PgQueuer's tables are managed by raw SQL, not by models."""
     del obj, compare_to
     return not (type_ == "table" and reflected and (name or "").startswith(PGQUEUER_TABLE_PREFIX))
+
+
+def render_item(type_: str, obj: object, autogen_context: AutogenContext) -> str | Literal[False]:
+    """Alembic ``render_item``: autogenerate writes ``UtcDateTime`` as its database type.
+
+    Alembic renders a type defined outside ``sqlalchemy`` by its module path without importing
+    it; a migration should not depend on application types anyway.
+    """
+    del type_
+    if isinstance(obj, UtcDateTime):
+        prefix = autogen_context.opts["sqlalchemy_module_prefix"] or ""
+        return f"{prefix}{obj.impl!r}"
+    return False
 
 
 def execute_script(sql: str) -> None:

@@ -67,16 +67,20 @@ def test_first_business_revision_uses_service_branch_and_round_trips(
             environment=environment,
         )
         (service / "app/adapter/repository/models.py").write_text(
-            "from fast_ddd_adapter.orm import Base\n"
+            "from fast_ddd_adapter.orm import Base, UtcDateTime\n"
             "from sqlalchemy import Column, Integer, Table\n"
             "orders = Table('order_record', Base.metadata,\n"
-            "    Column('id', Integer, primary_key=True))\n"
+            "    Column('id', Integer, primary_key=True),\n"
+            "    Column('created_at', UtcDateTime, nullable=False))\n"
         )
         run(service, "make", "migration", "name=create order record", environment=environment)
         revisions = list((service / "alembic/versions").glob("*.py"))
         assert len(revisions) == 2
         (created,) = [path for path in revisions if path.name != "0000_service.py"]
-        assert "service_0000" in created.read_text()
+        revision = created.read_text()
+        assert "service_0000" in revision
+        assert "sa.Column('created_at', sa.DateTime(timezone=True)" in revision
+        assert "fast_ddd_adapter" not in revision
         run(
             service,
             "uv",

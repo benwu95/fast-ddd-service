@@ -6,20 +6,29 @@ from pathlib import Path
 from typing import cast
 
 from alembic import command
-from alembic.autogenerate import compare_metadata
+from alembic.autogenerate import compare_metadata, render_python_code
+from alembic.autogenerate.api import AutogenContext
 from alembic.config import Config
+from alembic.operations import ops
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, MetaData, Table, text
+from sqlalchemy import Column, Connection, Integer, MetaData, String, Table, text
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.types import TypeDecorator
 
 from fast_ddd_adapter.migrations import (
     BRANCH_LABEL,
     add_kernel_versions,
     include_object,
+    render_item,
     version_location,
 )
-from fast_ddd_adapter.orm import NAMING_CONVENTION, DomainEventModel, ProcessedMessage
+from fast_ddd_adapter.orm import (
+    NAMING_CONVENTION,
+    DomainEventModel,
+    ProcessedMessage,
+    UtcDateTime,
+)
 from tests.conftest import alembic_config
 
 ENV_PY = """
@@ -130,3 +139,53 @@ def test_cli_lists_kernel_heads(tmp_path: Path) -> None:
     )
 
     assert "fastddd_0003 (fast_ddd) (head)" in result.stdout
+
+
+class _OtherType(TypeDecorator[str]):
+    impl = String()
+    cache_ok = True
+
+
+def test_utc_datetime_renders_as_sqlalchemy_datetime() -> None:
+    upgrade = ops.UpgradeOps(
+        ops=[
+            ops.CreateTableOp(
+                "record",
+                [Column("id", Integer, primary_key=True), Column("created_at", UtcDateTime())],
+            ),
+            ops.ModifyTableOps(
+                "record",
+                [
+                    ops.AlterColumnOp(
+                        "record",
+                        "created_at",
+                        existing_type=UtcDateTime(),
+                        modify_nullable=False,
+                    )
+                ],
+            ),
+        ]
+    )
+
+    code = render_python_code(upgrade, render_item=render_item)
+
+    assert "sa.Column('created_at', sa.DateTime(timezone=True)" in code
+    assert "existing_type=sa.DateTime(timezone=True)" in code
+    assert "fast_ddd_adapter" not in code
+
+
+def test_utc_datetime_follows_the_configured_sqlalchemy_prefix() -> None:
+    upgrade = ops.UpgradeOps(
+        ops=[ops.CreateTableOp("record", [Column("created_at", UtcDateTime())])]
+    )
+
+    code = render_python_code(upgrade, sqlalchemy_module_prefix="sqla.", render_item=render_item)
+
+    assert "sqla.Column('created_at', sqla.DateTime(timezone=True)" in code
+
+
+def test_render_item_defers_everything_else_to_alembic() -> None:
+    context = AutogenContext(MigrationContext.configure(dialect_name="postgresql"))
+
+    assert render_item("type", String(), context) is False
+    assert render_item("type", _OtherType(), context) is False

@@ -21,6 +21,7 @@
 - `integration_message()`、`publish_after_commit()` — 跨服務發送。
 - `TaskQueue.enqueue()` — 工作與業務資料原子提交。
 - `add_kernel_versions()` — 在 Alembic 載入前附加 migration 位置。
+- `include_object()`、`render_item()` — 服務 `alembic/env.py` 兩處 `context.configure` 的 hooks：排除 PgQueuer 表；autogenerate 將 `UtcDateTime` 寫成 `sa.DateTime(timezone=True)`。
 
 ## Dependencies
 **Depends on:** kernel core；SQLAlchemy、asyncpg、PgQueuer、FastStream、httpx2、OpenTelemetry。
@@ -42,6 +43,7 @@
 - JsonFormatter 限制已知 library 的 message／extras，保留 exception 型別與 frame；Uvicorn access 只記 method、path、status 與 client。
 - telemetry 以 ExitStack 交接 exporter／processor／reader 的 ownership；部分建構或安裝失敗也清理，trace 關閉失敗仍關閉 metrics。
 - kernel fixture 由 `kernel/tests/migrations/` 與 kernel Alembic branch 建 DB，不可用 create_all 取代。
+- Alembic 以 module 全名渲染定義在 `sqlalchemy` 以外的型別且不補 import；新增供服務 model 使用的自訂型別時須擴充 `render_item`，否則 autogenerate 的 revision 在執行 upgrade／downgrade 時 `NameError`（寫檔與 `heads` 仍成功）。
 <!-- prospec:auto-end -->
 <!-- prospec:user-start -->
 <!-- prospec:user-end -->

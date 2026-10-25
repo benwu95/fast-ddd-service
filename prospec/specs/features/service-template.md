@@ -1,7 +1,7 @@
 ---
 feature: service-template
 status: active
-last_updated: 2026-10-20
+last_updated: 2026-10-24
 story_count: 9
 req_count: 12
 ---
@@ -46,9 +46,12 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 - WHEN example 套用或重新產生骨架，THEN 既有 service revision chain 保留，不增加第二個 service root，也不覆寫後續業務 migrations。
 
 #### REQ-TEMPLATE-002: 空服務的 schema 生命週期
-服務可從空資料庫接續業務 migrations，kernel 與 service branch 都有可驗證的歷史。
+服務可從空資料庫接續業務 migrations，kernel 與 service branch 都有可驗證的歷史；kernel `UtcDateTime` 欄位的 autogenerate 輸出不引用 kernel 模組，revision 不需手改即可執行 upgrade／downgrade。
 - WHEN 對空服務套用全部 migrations，THEN kernel／service 各有一 head、沒有 billing tables，schema check 無待產生差異。
 - WHEN 建立第一個實際業務 migration 並升降版，THEN 操作指引中的指令成功，最後 schema check 通過；測試以正式 migrations 建 DB。
+- WHEN model 含 kernel `UtcDateTime` 欄位並執行 `make migration`，THEN 產生的 revision 將該欄位寫成 `sa.DateTime(timezone=True)`、不引用 `fast_ddd_adapter`，不需修改即可升降版。
+- WHEN autogenerate 渲染 `UtcDateTime` 以外的型別，THEN 輸出與 alembic 預設相同。
+- WHEN 檢視 template 與 example 的 `alembic/env.py`，THEN 兩者內容一致，online 與 offline 的 `context.configure` 都傳入同一渲染 hook。
 - WHEN 更新或 recopy 已有 service branch 的 example／服務，THEN 不新增第二個 service root、不覆寫既有 baseline 或後續 migrations，example revision chain 保留。
 
 ---
@@ -245,6 +248,7 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-10-24 | render-utcdatetime-in-migrations | MODIFIED REQ-TEMPLATE-002 | REQ-TEMPLATE-002 |
 | 2026-10-20 | add-fast-ddd-service-skill | ADDED REQ-TEMPLATE-009; ADDED REQ-TEMPLATE-010; ADDED REQ-TEMPLATE-011; ADDED REQ-TEMPLATE-012; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-008 | REQ-TEMPLATE-009, REQ-TEMPLATE-010, REQ-TEMPLATE-011, REQ-TEMPLATE-012, REQ-TEMPLATE-001, REQ-TEMPLATE-008 |
 | 2026-10-20 | ship-fast-ddd-init-plugin | ADDED REQ-TEMPLATE-008; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-004 | REQ-TEMPLATE-008, REQ-TEMPLATE-001, REQ-TEMPLATE-004 |
 | 2026-10-18 | extract-service-template | 新增服務骨架與完整驗收規格 | REQ-TEMPLATE-001, REQ-TEMPLATE-002, REQ-TEMPLATE-003, REQ-TEMPLATE-004, REQ-TEMPLATE-005, REQ-TEMPLATE-006, REQ-TEMPLATE-007 |

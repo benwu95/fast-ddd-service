@@ -1,7 +1,7 @@
 ---
 product: fast-ddd-service
 version: phase-2
-last_updated: 2026-10-20
+last_updated: 2026-10-24
 ---
 
 # fast-ddd-service — Python DDD／Event-driven 參考架構

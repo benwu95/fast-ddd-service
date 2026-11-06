@@ -1,7 +1,7 @@
 ---
 feature: runtime-foundation
 status: active
-last_updated: 2026-10-17
+last_updated: 2026-11-06
 story_count: 1
 req_count: 4
 ---
@@ -51,10 +51,10 @@ req_count: 4
 ---
 
 #### REQ-KERNEL-010: 可重複執行的品質與 schema 驗證
-
 kernel 與 example 提供相同品質基準，包含型別、分層、完整測試與正式 migration schema；錯誤目錄與套件 contract 涵蓋有單一工具 owner。
 
 - WHEN 執行 kernel 或 example 的 make check，THEN 兩個 make check 都涵蓋 format／lint、strict typing、package／import contracts、uv lock 一致性、完整 pytest 與各自 coverage≥80%；既有 106／44 個 node id 作基準，刪改有需求理由，不能降低門檻或略過必要外部工具。
+- WHEN root package 下的目錄本身或任一子孫目錄含 `.py` 檔卻缺少 `__init__.py`，THEN `fast-ddd-check-packages` 以非零 exit code 結束並逐一列出每個缺少的目錄；相對於 root package 的路徑經過 `__pycache__` 或 `.` 開頭目錄的 `.py` 檔不計入，不含 `.py` 檔的子樹不要求 `__init__.py`。
 - WHEN 建立、升降版或比對資料庫 schema，THEN 整合 fixture 經 Alembic 建立 kernel／service／test-only schema；正式發佈的 kernel 與 service 各一個 head，upgrade／downgrade 及 model autogenerate 無未落實差異；test-only branch 不進 runtime wheel。
 - WHEN 產生錯誤目錄或執行 CI／pre-commit，THEN 錯誤代碼格式／唯一性／message params 一致性與 contract 涵蓋檢查由現有 devtools／tests 驗證；CI 與 pre-commit 使用既有品質 owner，不另建平行規則來源。
 
@@ -96,4 +96,5 @@ kernel 與 example 提供相同品質基準，包含型別、分層、完整測�
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-11-06 | fail-on-missing-intermediate-init | MODIFIED REQ-KERNEL-010 | REQ-KERNEL-010 |
 | 2026-10-17 | replan-phase-one | 建立已驗收能力基準 | US-1, REQ-KERNEL-009, REQ-EXAMPLE-001, REQ-KERNEL-010, REQ-EXAMPLE-002 |

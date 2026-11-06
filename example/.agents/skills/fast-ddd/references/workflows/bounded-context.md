@@ -28,7 +28,7 @@ Placeholders: `<context>` is the bounded context name in snake_case (for example
 
 - `references/example/app/core/billing/__init__.py`: the context package; copy the layout `domain/` + `use_case/` under it.
 - `references/example/app/core/billing/domain/invoice.py`: `bounded_context: ClassVar[str] = "billing"` and `CustomerId`/`Customer`, a context keeping its own id type and value-object snapshot of another context's data instead of importing it.
-- `references/example/app/adapter/controller/__init__.py`: intermediate package marker. No check enforces it: `fast-ddd-check-packages` only inspects directories that contain `.py` files, so without this file `make check` still passes while import-linter silently skips everything below it.
+- `references/example/app/adapter/controller/__init__.py`: intermediate package marker. Without it import-linter would skip everything below it; `fast-ddd-check-packages` reports the missing file, so `make check` fails.
 - `references/example/app/port/restful/__init__.py`: same for the port side.
 - `references/example/app/port/message_queue/customer/customer_subscriber.py`: data from another context or service arrives as a message, not as a core import.
 - `references/example/app/wiring.py`: where the first aggregate's router and handlers are registered.
@@ -36,7 +36,7 @@ Placeholders: `<context>` is the bounded context name in snake_case (for example
 ## Steps
 
 1. Pick `<context>` with the user. It must match `[a-z][a-z0-9_]*` (lowercase letter first; a merely valid Python identifier such as `Billing` makes every `DomainError` in the context fail at import) and be short: it ends up in table names and error codes (max 63 characters per code).
-2. Create the core, adapter and port packages listed above with empty `__init__.py` files, including every intermediate directory. `fast-ddd-check-packages` fails only for a directory that contains `.py` files but no `__init__.py`; a missing marker in a directory that holds only sub-packages (`app/core/<context>/`, `app/adapter/controller/`, `app/port/restful/`, ...) passes `make check` while import-linter silently skips that whole subtree (its contracts still report "kept"), so no check enforces this step. Verify the markers explicitly: from the service root, `find app -type d -not -name __pycache__ -exec test ! -e {}/__init__.py \; -print` must print nothing.
+2. Create the core, adapter and port packages listed above with empty `__init__.py` files, including every intermediate directory that holds only sub-packages (`app/core/<context>/`, `app/adapter/controller/`, `app/port/restful/`, ...). `make check` fails through `fast-ddd-check-packages` and lists the directory when one of them is missing, because import-linter would otherwise skip that whole subtree while its contracts still report "kept".
 3. Keep the context independent. Code in `app/core/<context>/` never imports `app.core.<other>`; refer to another context's aggregates by an id `NewType` declared in this context and copy the few attributes you need into a frozen value object. React to another context's changes through a domain event handler (`references/workflows/event-handler.md`) or an MQ subscriber (`references/workflows/mq-consumer.md`).
 4. If two contexts need the same pure helper, do not put it under `app/core/` (the independence contract treats every child as a context). Shared core code goes to `app/lib` with its own contract changes; see "Where shared code lives" in `references/decisions.md` and ask the user before adding it.
 5. Add the first aggregate with `references/workflows/aggregate.md`. It registers the router in `app/wiring.py`, the model module in `app/adapter/repository/models.py`, creates the migration and the tests.
@@ -45,9 +45,9 @@ Placeholders: `<context>` is the bounded context name in snake_case (for example
 ## Required tests
 
 - The context itself adds no test file. Its first aggregate brings the full set from `references/workflows/aggregate.md`: domain unit tests under `tests/core/`, repository integration tests (testcontainers PostgreSQL) under `tests/adapter/`, API tests under `tests/port/` and the error catalog test, following `references/example/tests/core/test_invoice.py`, `references/example/tests/adapter/test_invoice_repository.py`, `references/example/tests/port/test_invoice_api.py` and `references/example/tests/test_error_catalog.py`.
-- `make check` checks part of the package layout: `fast-ddd-check-packages` fails when a directory with `.py` files lacks `__init__.py` or when a top-level `app.*` module is in no contract; it does not see a missing marker in a directory that only holds sub-packages. `lint-imports` then enforces no cross-context import in core, but only for packages import-linter can see; the `find` check from step 2 covers the rest.
+- `make check` checks the package layout: `fast-ddd-check-packages` fails when a directory under `app/` lacks `__init__.py` while it or a directory below it contains `.py` files, or when a top-level `app.*` module is in no contract. `lint-imports` then enforces no cross-context import in core.
 
 ## Pitfalls
 
-- A missing intermediate `__init__.py` (for example `app/port/restful/__init__.py`) does not fail `make check`: the package check only looks at directories with `.py` files, and import-linter silently skips the subtree, so its contracts stop applying there. Below the layer packages (`app/core/`, `app/adapter/`, `app/port/`) the template ships only `app/adapter/repository/__init__.py`.
+- A missing intermediate `__init__.py` (for example `app/port/restful/__init__.py`) fails `make check` through `fast-ddd-check-packages`; add the empty file rather than moving modules. Below the layer packages (`app/core/`, `app/adapter/`, `app/port/`) the template ships only `app/adapter/repository/__init__.py`.
 - Do not add a placeholder aggregate or empty router just to make the context visible; the empty template already passes every contract.

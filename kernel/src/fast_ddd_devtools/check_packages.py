@@ -3,7 +3,7 @@ import configparser
 import re
 import sys
 import tomllib
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -71,14 +71,31 @@ def _package_dir(source_root: Path, package: str) -> Path:
     return source_root.joinpath(*package.split("."))
 
 
-def _directories_with_python(package_dir: Path) -> Iterable[Path]:
-    for directory in [package_dir, *package_dir.rglob("*")]:
-        if not directory.is_dir() or directory.name in _SKIPPED_DIRS:
-            continue
-        if any(part.startswith(".") for part in directory.relative_to(package_dir).parts):
-            continue
-        if any(child.suffix == ".py" for child in directory.iterdir()):
-            yield directory
+def _raise(error: OSError) -> None:
+    raise error
+
+
+def _directories_requiring_init(package_dir: Path) -> list[Path]:
+    # import-linter follows symlinked directories, so this walk does too; the chain of resolved
+    # ancestors stops a symlink that points back up the tree from recursing forever.
+    directories: set[Path] = set()
+    real_ancestors = {package_dir: frozenset({package_dir.resolve()})}
+    for directory, subdirectories, files in package_dir.walk(follow_symlinks=True, on_error=_raise):
+        ancestors = real_ancestors.pop(directory)
+        kept: list[str] = []
+        for name in subdirectories:
+            real = (directory / name).resolve()
+            if name in _SKIPPED_DIRS or name.startswith(".") or real in ancestors:
+                continue
+            real_ancestors[directory / name] = ancestors | {real}
+            kept.append(name)
+        subdirectories[:] = kept
+        if any(name.endswith(".py") for name in files):
+            parts = directory.relative_to(package_dir).parts
+            directories.update(
+                package_dir.joinpath(*parts[:depth]) for depth in range(1, len(parts) + 1)
+            )
+    return sorted(directories)
 
 
 def _immediate_children(package: str, package_dir: Path) -> list[str]:
@@ -107,7 +124,7 @@ def find_problems(config: LinterConfig, source_root: Path) -> list[str]:
         if not (package_dir / "__init__.py").exists():
             problems.append(f"{package}: root package not found at {package_dir}")
             continue
-        for directory in _directories_with_python(package_dir):
+        for directory in _directories_requiring_init(package_dir):
             if not (directory / "__init__.py").exists():
                 problems.append(f"{directory}: missing __init__.py, import-linter would skip it")
         for module in _immediate_children(package, package_dir):

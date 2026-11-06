@@ -9,7 +9,7 @@
 ## Files to change
 
 - `app/adapter/event_handler/<context>/<aggregate>_event_handler.py`: the handlers and a `register(bus: EventBus)` function.
-- `app/adapter/event_handler/__init__.py` and `app/adapter/event_handler/<context>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports only a missing `<context>/__init__.py`, because it checks only directories that directly contain `.py` files. Without `app/adapter/event_handler/__init__.py`, `make check` still passes while import-linter silently skips every module under it.
+- `app/adapter/event_handler/__init__.py` and `app/adapter/event_handler/<context>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports either one when it is missing, so `make check` fails until both exist.
 - `app/wiring.py`: call `<aggregate>_event_handler.register(bus)` from `wire_events`. The template names the unused parameter `_bus`; rename it to `bus`, or ruff reports the undefined name.
 - `app/adapter/controller/<context>/task_names.py`: task name constants, only when a handler enqueues a task.
 - `tests/port/test_<aggregate>_api.py` or `tests/port/test_<aggregate>_tasks.py`: assertions for the published messages or enqueued tasks.

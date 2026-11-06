@@ -28,6 +28,7 @@
 - 產生目錄前必須 import 服務的 domain／wiring，否則 subclass 尚未註冊。
 - 通過 import-linter 不代表空 package 的漏管可忽略；覆蓋工具是獨立檢查。
 - 缺 `__init__.py` 的判斷以含 `.py` 的目錄及其祖先推導，涵蓋只含子 package 的中介目錄；與 grimp 一樣跟隨 symlink 目錄，並以實際路徑祖先鏈剪除迴圈；無法列出內容的目錄直接拋錯；root package 第二層以下、目標無法 stat（例如其上層目錄沒有搜尋權限）的 symlink 會被走訪當成檔案而略過，grimp 同樣略過，屬已知限制。排除只看 root package 以下的目錄名稱（`__pycache__`、`.` 開頭），不可改看絕對路徑，否則位於隱藏目錄或以 `..` 傳入的 source root 會整樹略過。
+- 名稱不是合法識別字（`str.isidentifier()`，與 grimp 的 `_should_ignore_dir` 相同）的目錄回報 `not a valid package name`，直接重用 `_directories_requiring_init` 的結果，因此排除條件與缺 `__init__.py` 規則一致；symlink 目錄以連結名稱判斷。同一目錄兩則訊息可同時出現；Python keyword 目錄名稱是識別字，grimp 不略過，不在此規則內。
 <!-- prospec:auto-end -->
 <!-- prospec:user-start -->
 <!-- prospec:user-end -->

@@ -125,6 +125,11 @@ def find_problems(config: LinterConfig, source_root: Path) -> list[str]:
             problems.append(f"{package}: root package not found at {package_dir}")
             continue
         for directory in _directories_requiring_init(package_dir):
+            # grimp drops every subdirectory whose name is not an identifier, __init__.py or not.
+            if not directory.name.isidentifier():
+                problems.append(
+                    f"{directory}: not a valid package name, import-linter would skip it"
+                )
             if not (directory / "__init__.py").exists():
                 problems.append(f"{directory}: missing __init__.py, import-linter would skip it")
         for module in _immediate_children(package, package_dir):

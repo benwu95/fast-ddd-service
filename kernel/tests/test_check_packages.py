@@ -104,6 +104,63 @@ def test_directories_without_python_modules_are_not_reported(project: Path) -> N
     assert find_problems(load_config(project / "pyproject.toml"), project) == []
 
 
+@pytest.mark.parametrize("name", ["billing-v2", "2024_jobs", "v1.2", "billing jobs", "jobs@v2"])
+def test_directory_with_invalid_name_is_reported_even_with_init(project: Path, name: str) -> None:
+    directory = project / "app" / "core" / name
+    directory.mkdir()
+    (directory / "__init__.py").touch()
+    (directory / "entity.py").touch()
+
+    problems = find_problems(load_config(project / "pyproject.toml"), project)
+
+    assert problems == [f"{directory}: not a valid package name, import-linter would skip it"]
+
+
+@pytest.mark.parametrize("name", ["class", "café"])
+def test_identifier_names_grimp_analyzes_are_not_reported(project: Path, name: str) -> None:
+    _make_package(project, f"app.core.{name}")
+    (project / "app" / "core" / name / "entity.py").touch()
+
+    assert find_problems(load_config(project / "pyproject.toml"), project) == []
+
+
+def test_invalid_name_and_missing_init_are_both_reported(project: Path) -> None:
+    directory = project / "app" / "core" / "billing-v2"
+    directory.mkdir()
+    (directory / "entity.py").touch()
+
+    problems = find_problems(load_config(project / "pyproject.toml"), project)
+
+    assert problems == [
+        f"{directory}: not a valid package name, import-linter would skip it",
+        f"{directory}: missing __init__.py, import-linter would skip it",
+    ]
+
+
+def test_valid_package_below_invalid_name_is_not_reported(project: Path) -> None:
+    _make_package(project, "app.core.billing-v2", "app.core.billing-v2.domain")
+    (project / "app" / "core" / "billing-v2" / "domain" / "entity.py").touch()
+
+    problems = find_problems(load_config(project / "pyproject.toml"), project)
+
+    assert problems == [
+        f"{project / 'app' / 'core' / 'billing-v2'}: not a valid package name, "
+        "import-linter would skip it"
+    ]
+
+
+def test_invalid_names_without_walked_python_modules_are_not_reported(project: Path) -> None:
+    static = project / "app" / "static-files"
+    static.mkdir()
+    (static / "logo.svg").touch()
+    for parent in (".hidden", "core/__pycache__"):
+        directory = project / "app" / parent / "bad-name"
+        directory.mkdir(parents=True)
+        (directory / "module.py").touch()
+
+    assert find_problems(load_config(project / "pyproject.toml"), project) == []
+
+
 def test_symlinked_directory_without_init_is_reported(project: Path, tmp_path: Path) -> None:
     external = tmp_path / "external"
     external.mkdir()
@@ -114,6 +171,23 @@ def test_symlinked_directory_without_init_is_reported(project: Path, tmp_path: P
 
     assert problems == [
         f"{project / 'app' / 'core' / 'linked'}: missing __init__.py, import-linter would skip it"
+    ]
+
+
+def test_symlinked_directory_is_judged_by_its_link_name(project: Path, tmp_path: Path) -> None:
+    for target_name in ("valid_target", "bad-target"):
+        target = tmp_path / target_name
+        target.mkdir()
+        (target / "__init__.py").touch()
+        (target / "entity.py").touch()
+    core = project / "app" / "core"
+    (core / "bad-link").symlink_to(tmp_path / "valid_target", target_is_directory=True)
+    (core / "good_link").symlink_to(tmp_path / "bad-target", target_is_directory=True)
+
+    problems = find_problems(load_config(project / "pyproject.toml"), project)
+
+    assert problems == [
+        f"{core / 'bad-link'}: not a valid package name, import-linter would skip it"
     ]
 
 
@@ -185,6 +259,19 @@ def test_main_returns_non_zero_on_missing_intermediate_init(
 
     assert exit_code == 1
     assert f"{project / 'app' / 'port' / 'restful'}: missing __init__.py" in capsys.readouterr().err
+
+
+def test_main_returns_non_zero_on_invalid_package_name(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _make_package(project, "app.core.billing-v2")
+    (project / "app" / "core" / "billing-v2" / "entity.py").touch()
+
+    exit_code = main(["--config", str(project / "pyproject.toml"), "--source-root", str(project)])
+
+    assert exit_code == 1
+    error = capsys.readouterr().err
+    assert f"{project / 'app' / 'core' / 'billing-v2'}: not a valid package name" in error
 
 
 def test_top_level_module_outside_contracts_is_reported(project: Path) -> None:

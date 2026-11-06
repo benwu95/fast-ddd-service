@@ -221,7 +221,7 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 - 框架歷史 ownership 永久保留退役路徑；CI 只回報殘留，不自動刪檔或寫清單。
 - snapshot 內部 symlink 重定位到副本；外部路徑在寫入前拒絕。
 - 版本檢查讀不到 lock、lock 沒有 `fast-ddd-kernel` 或 SKILL.md 的版本欄位缺漏、重複時視為不一致，訊息列出兩邊可取得的值；`make` 在 recipe 失敗時一律 exit 2，skill 以固定的失敗訊息判斷是否為版本不一致。
-- 中介 package 缺少 `__init__.py` 時 import-linter 會略過該子樹，`fast-ddd-check-packages` 因此列出該目錄並使 `make check` 失敗（規則見 runtime-foundation 的 REQ-KERNEL-010）；目錄名稱不是合法識別字或 symlink 目標無法 stat 時，import-linter 仍會略過，不在此檢查範圍。
+- 中介 package 缺少 `__init__.py` 時 import-linter 會略過該子樹，`fast-ddd-check-packages` 因此列出該目錄並使 `make check` 失敗（規則見 runtime-foundation 的 REQ-KERNEL-010）；目錄名稱不是合法識別字（如 `billing-v2`）時，即使有 `__init__.py` import-linter 仍會略過，`fast-ddd-check-packages` 同樣列出該目錄（`not a valid package name`），需改名而非補檔；symlink 目標無法 stat 時 import-linter 仍會略過，不在此檢查範圍。
 - template 退役的追蹤檔案（`.claude/settings.json`）在 update 時被刪除，即使服務修改過也無衝突；服務已有實體 `.claude/skills` 目錄時 update 失敗，需先把 skill 移到 `.agents/skills/`。
 
 ## Success Criteria

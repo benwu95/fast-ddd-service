@@ -45,7 +45,7 @@ Placeholders: `<context>` is the bounded context name in snake_case (for example
 ## Required tests
 
 - The context itself adds no test file. Its first aggregate brings the full set from `references/workflows/aggregate.md`: domain unit tests under `tests/core/`, repository integration tests (testcontainers PostgreSQL) under `tests/adapter/`, API tests under `tests/port/` and the error catalog test, following `references/example/tests/core/test_invoice.py`, `references/example/tests/adapter/test_invoice_repository.py`, `references/example/tests/port/test_invoice_api.py` and `references/example/tests/test_error_catalog.py`.
-- `make check` checks the package layout: `fast-ddd-check-packages` fails when a directory under `app/` lacks `__init__.py` while it or a directory below it contains `.py` files, or when a top-level `app.*` module is in no contract. `lint-imports` then enforces no cross-context import in core.
+- `make check` checks the package layout: `fast-ddd-check-packages` fails when a directory under `app/` lacks `__init__.py` or has a name that is not a valid Python identifier (`not a valid package name`; rename it, because import-linter skips it even with `__init__.py`) while it or a directory below it contains `.py` files, or when a top-level `app.*` module is in no contract. `lint-imports` then enforces no cross-context import in core.
 
 ## Pitfalls
 

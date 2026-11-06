@@ -165,7 +165,7 @@ Phase 3 另以 optional extra `fast-ddd-kernel[realtime]` 加入即時推播的 
 - `forbidden`：`app.port` 不得 import `app.adapter.repository`（port 只能透過 controller 使用 adapter，不直接存取 repository），設定 `allow_indirect_imports = True`。forbidden contract 預設會檢查間接 import，而 port → controller → repository 正是設計要求的路徑；實測（import-linter）不設定時這條鏈會被判定為違規。
 - `independence`：各 bounded context 的 `core` 之間互相獨立。
 - 根設定加上 `unmatched_ignore_imports_alerting = error`：`ignore_imports` 中已經不存在的例外會直接報錯，例外清單只能縮小、不會殘留失效的項目。
-- **contract 涵蓋檢查**：import-linter（底層的 grimp）不分析沒有 `__init__.py` 的目錄，裡面的 import 會被靜默略過。kernel 提供一個檢查指令，納入 `make check`：`app/` 下直接含有 `.py` 檔的目錄都必須是一般套件（有 `__init__.py`），而且每個最上層模組都至少出現在一條 contract 中。只含子套件的中間目錄（例如 `app/core/<context>/`）不在檢查範圍內；它缺少 `__init__.py` 時，import-linter 會略過其下所有模組、仍回報所有 contract 都 kept，而這個檢查也不會失敗（已實測），因此 skill 規定 `app/` 下每個目錄都要有 `__init__.py`，並在新增目錄時明確檢查。這個檢查本身也要有測試。
+- **contract 涵蓋檢查**：import-linter（底層的 grimp）不分析沒有 `__init__.py` 的目錄，裡面的 import 會被靜默略過。kernel 提供一個檢查指令，納入 `make check`：`app/` 下本身或其下任一層目錄含有 `.py` 檔的目錄都必須是一般套件（有 `__init__.py`），而且每個最上層模組都至少出現在一條 contract 中。這也涵蓋只含子套件的中間目錄（例如 `app/core/<context>/`）：它缺少 `__init__.py` 時，import-linter 會略過其下所有模組、仍回報所有 contract 都 kept（已實測），因此由這個檢查讓 `make check` 失敗。位於 `__pycache__` 或以 `.` 開頭目錄下的 `.py` 檔不計入。這個檢查本身也要有測試。
 - `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `app.bootstrap`、`app.wiring`、`app.main`、`app.consumer`、`app.task_worker`（第 6.3 節：只有進入點可以 import 組裝點和接線）。
 - `forbidden`：`app.core`、`app.adapter`、`app.port` 不得 import `pgqueuer`（第 11.1 節：PgQueuer 只能出現在 kernel 的實作中，服務一律透過 `TaskQueue` 介面使用）。
 

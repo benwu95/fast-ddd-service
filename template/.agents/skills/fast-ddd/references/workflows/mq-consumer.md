@@ -9,7 +9,7 @@
 ## Files to change
 
 - `app/port/message_queue/<source>/<source>_subscriber.py`: exchange and queue constants, the `MessageModel` payload, the handler, and `register(broker, session_factory) -> list[str]`. `<source>` names the publishing side (the example uses `customer`).
-- `app/port/message_queue/__init__.py` and `app/port/message_queue/<source>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports only a missing `<source>/__init__.py`, because it checks only directories that directly contain `.py` files. Without `app/port/message_queue/__init__.py`, `make check` still passes while import-linter silently skips every module under it.
+- `app/port/message_queue/__init__.py` and `app/port/message_queue/<source>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports either one when it is missing, so `make check` fails until both exist.
 - `app/adapter/controller/<context>/<aggregate>_controller.py`: the controller method the handler calls, plus any repository query it needs.
 - `app/wiring.py`: return the queue names from `wire_consumer`; with several subscriber modules, concatenate their lists. The template names the unused parameters `_broker` and `_session_factory`; rename the ones you use to `broker` and `session_factory`.
 - `tests/port/test_<source>_subscriber.py`, and `tests/port/__init__.py` if missing.

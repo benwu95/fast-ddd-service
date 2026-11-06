@@ -10,7 +10,7 @@
 
 - `app/adapter/controller/<context>/task_names.py`: task and schedule name constants. They live in the adapter because both the adapter event handler (enqueue) and the port (registration) import them.
 - `app/port/task/<context>/<aggregate>_tasks.py`: payload models, task handlers and `register(registry: TaskRegistry)`.
-- `app/port/task/__init__.py` and `app/port/task/<context>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports only a missing `<context>/__init__.py`, because it checks only directories that directly contain `.py` files. Without `app/port/task/__init__.py`, `make check` still passes while import-linter silently skips every module under it.
+- `app/port/task/__init__.py` and `app/port/task/<context>/__init__.py`: empty package markers; the template ships neither, so create both. `fast-ddd-check-packages` reports either one when it is missing, so `make check` fails until both exist.
 - `app/adapter/controller/<context>/<aggregate>_controller.py`: the controller methods that do the work and, for cron, the fan-out.
 - `app/adapter/event_handler/<context>/<aggregate>_event_handler.py`: the handler that enqueues the task from a domain event (see `references/workflows/event-handler.md`).
 - `app/wiring.py`: call `<aggregate>_tasks.register(registry)` from `wire_tasks`. The template names the unused parameter `_registry`; rename it to `registry`.

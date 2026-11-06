@@ -22,21 +22,128 @@ _No dependencies detected_
 
 ## Config Files
 
+- `.gitignore`
+- `.prospec.yaml`
 - `Makefile`
+- `example/.dockerignore`
+- `example/.gitignore`
 - `example/Dockerfile`
 - `example/Makefile`
 - `example/pyproject.toml`
 - `kernel/Makefile`
 - `kernel/pyproject.toml`
 - `pyproject.toml`
+- `template/.dockerignore`
+- `template/.gitignore`
 - `template/Dockerfile`
 - `template/Makefile`
 
 ## Directory Tree
 
 ```
+.agents/
+  skills/
+    prospec-archive/
+      references/
+    prospec-backfill-spec/
+      references/
+    prospec-explore/
+    prospec-ff/
+      references/
+    prospec-implement/
+      references/
+    prospec-knowledge-generate/
+    prospec-knowledge-update/
+    prospec-learn/
+      references/
+    prospec-new-story/
+      references/
+    prospec-plan/
+      references/
+    prospec-promote-backfill/
+      references/
+    prospec-quickstart/
+    prospec-review/
+      references/
+    prospec-tasks/
+      references/
+    prospec-upgrade/
+    prospec-verify/
+      references/
+    submit-issue/
+    submit-pr/
+.claude-plugin/
+.claude/
+  skills/
+    prospec-archive/
+      references/
+    prospec-backfill-spec/
+      references/
+    prospec-explore/
+    prospec-ff/
+      references/
+    prospec-implement/
+      references/
+    prospec-knowledge-generate/
+    prospec-knowledge-update/
+    prospec-learn/
+      references/
+    prospec-new-story/
+      references/
+    prospec-plan/
+      references/
+    prospec-promote-backfill/
+      references/
+    prospec-quickstart/
+    prospec-review/
+      references/
+    prospec-tasks/
+      references/
+    prospec-upgrade/
+    prospec-verify/
+      references/
+    submit-issue/
+    submit-pr/
+.github/
+  workflows/
 docs/
 example/
+  .agents/
+    skills/
+      fast-ddd/
+        references/
+          example/
+            alembic/
+              versions/
+            app/
+              adapter/
+                controller/
+                  billing/
+                event_handler/
+                  billing/
+                notification/
+                repository/
+                  billing/
+              core/
+                billing/
+                  domain/
+                  use_case/
+              port/
+                message_queue/
+                  customer/
+                restful/
+                  billing/
+                task/
+                  billing/
+            tests/
+              adapter/
+              core/
+              port/
+          rules/
+          workflows/
+        scripts/
+  .github/
+    workflows/
   alembic/
     versions/
   app/
@@ -96,6 +203,42 @@ skills/
   fast-ddd-init/
     agents/
 template/
+  .agents/
+    skills/
+      fast-ddd/
+        references/
+          example/
+            alembic/
+              versions/
+            app/
+              adapter/
+                controller/
+                  billing/
+                event_handler/
+                  billing/
+                notification/
+                repository/
+                  billing/
+              core/
+                billing/
+                  domain/
+                  use_case/
+              port/
+                message_queue/
+                  customer/
+                restful/
+                  billing/
+                task/
+                  billing/
+            tests/
+              adapter/
+              core/
+              port/
+          rules/
+          workflows/
+        scripts/
+  .github/
+    workflows/
   alembic/
     versions/
   app/
@@ -124,16 +267,26 @@ template/
 > non-source ancestor, and both lists are ordered by file volume — a cap keeps the biggest, not the
 > alphabetically first.
 
-- `prospec/` — 33 files: `.md`, `.yaml`
+- `.agents/` — 66 files: `.md`
+- `.claude/` — 66 files: `.md`
+- `prospec/` — 35 files: `.md`, `.yaml`, `(no extension)`
+- `example/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
+- `template/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
+- `example/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
+- `template/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
+- `.claude-plugin/` — 2 files: `.json`
 - `docs/` — 2 files: `.md`
 - `example/tests/typing_contracts/` — 2 files: `.txt`
 - `skills/` — 2 files: `.md`, `.yaml`
+- `.github/` — 1 file: `.yml`
+- `example/.github/` — 1 file: `.yml`
 - `example/docs/` — 1 file: `.md`
+- `template/.github/` — 1 file: `.yml`
 - `template/docs/` — 1 file: `.md`
 
 ## File Stats
 
 | Metric | Value |
 |--------|-------|
-| Total files | 281 |
-| Scan depth | 10 |
+| Total files | 567 |
+| Directory Tree depth | 10 |

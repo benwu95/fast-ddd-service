@@ -15,7 +15,7 @@ When triggered, briefly describe:
 
 ## Language Policy
 
-Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Keep code, identifiers, technical terms, and git commit messages in English.
+Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Free text you pass the CLI that lands in a change artifact follows the artifact language too, leaving its paths, commands, enum values and the fixed prefixes the CLI matches untranslated. Keep code, identifiers, technical terms, and git commit messages in English.
 ## CLI Prerequisite (required)
 
 > The prospec CLI is a required file for this skill — its deterministic steps call `prospec`
@@ -26,7 +26,7 @@ Write each generated document in the language the Constitution's Language Policy
    executable — the one-click installer script from the project README (macOS/Linux `install.sh`,
    Windows `install.ps1`) or a release binary from GitHub Releases; prospec is NOT published to
    npm. Then re-run this skill.
-3. **Version older than 2.9.0** → STOP. Report the installed vs required version
+3. **Version older than 2.11.0** → STOP. Report the installed vs required version
    and ask the user to upgrade, then re-run this skill.
 
 Hand-executing a CLI-owned mutation is NEVER the fallback — that re-introduces the
@@ -38,8 +38,7 @@ nondeterministic serialization this contract exists to remove.
 2. [STABLE] **MANDATORY** — Read [`references/tasks-format.md`](references/tasks-format.md) for tasks.md format
 3. [DYNAMIC] Read `.prospec/changes/[name]/plan.md` — parse implementation steps
 4. [DYNAMIC] Read `.prospec/changes/[name]/delta-spec.md` — parse file changes and specifications
-5. [DYNAMIC] Read `.prospec/changes/[name]/design-spec.md` (if exists) — identify UI components for task decomposition
-6. [DYNAMIC] Read related module `README.md` from `prospec/ai-knowledge/modules/` (and any `{sub-module}.md` it links) — confirm architecture layers and dependency directions for task ordering
+5. [DYNAMIC] Read related module `README.md` from `prospec/ai-knowledge/modules/` (and any `{sub-module}.md` it links) — confirm architecture layers and dependency directions for task ordering
 
 ## Entry Gate
 
@@ -82,7 +81,7 @@ Task format: `- [ ] [description]`. A `~{lines} lines` estimate and a `[P]` para
 - Verifiable with clear completion criteria
 - Right-sized (ideal 15-25 tasks, 20-100 lines each)
 - Dependency direction: follow project conventions (lower layers first)
-- UI tasks (when `design-spec.md` exists): reference component names and annotate with adapter MCP measurement instructions
+- UI changes (Design Source in plan.md; quick: proposal.md): UI tasks cite the source — for `none`, the UI structure from plan.md, or stated here without a plan — plus a visual regression test task in the project's suite, run by `test_command` and recorded by `prospec check --record-tests`
 
 > **Phase 3 Gate** — proceed when:
 > - [ ] tasks written to `tasks.md`, grouped by architecture layer per the project's conventions (see [`references/tasks-format.md`](references/tasks-format.md))
@@ -191,7 +190,6 @@ Verify the output against this skill's **site-specific** Constitution rule (**TD
 - **NEVER** fabricate mock report files, dummy outputs, or synthetic PASS when a receipt file is missing or unreadable — fail closed with concrete diagnostic errors
 - **NEVER** add `references/tasks-verifier-rubric.md` to Startup Loading or the stable prefix — it is an in-phase, on-demand read only (preserves cache stability)
 - **NEVER** hardcode specific layer architectures in the verifier audit — dynamically resolve rules from the project's Constitution and conventions
-- **NEVER** proceed past Phase 6 on unresolved FLAWS; a documented Break-Glass Override authorizes another attempt
 
 ## Error Handling
 
@@ -204,7 +202,7 @@ Verify the output against this skill's **site-specific** Constitution rule (**TD
 ## Next-Step Handoff
 
 After the Output Summary, recommend the next step in the SDD workflow order
-(`story → plan → tasks → implement → review → verify → knowledge-update → archive`, then periodic `learn`) — read
+(`story → plan → tasks → implement → knowledge-update → review → verify → archive`, then periodic `learn`) — read
 `metadata.yaml` status and `prospec/ai-knowledge/_status-lifecycle.md` (review and learn own no
 status transition, so follow this order, not status alone). Provide the direct, actionable Skill
 identity or CLI command for the next step (e.g. `prospec-plan`), allowing smooth continuation

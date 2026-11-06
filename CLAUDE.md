@@ -41,7 +41,7 @@ Each Skill's description and trigger words are surfaced automatically from its `
 
 At the start of a session, run `prospec status` — it deterministically reports each in-progress
 change's name, current node, suggested next step, and blocking gates (the executable copy of
-`prospec/ai-knowledge/_status-lifecycle.md`). The prospec CLI (version ≥ 2.9.0)
+`prospec/ai-knowledge/_status-lifecycle.md`). The prospec CLI (version ≥ 2.11.0)
 is a required file for the prospec skills: when it is missing or too old, STOP and install/upgrade
 the standalone executable before running any skill — never substitute manual steps.
 
@@ -54,6 +54,8 @@ the standalone executable before running any skill — never substitute manual s
 - Invoke — or re-invoke — the named Skill through this host's own skill mechanism, on every transition and re-entry. When that mechanism is unavailable, read the fallback file under `.claude/skills/` instead.
 
 Then read that station's references at the phases it names; loading a station never means its references arrived. If neither route yields the station's instructions, STOP and name what is missing — never act on remembered rules, and never skip an entry gate or a receipt. Accumulated context is no substitute: a long session's diffs and logs dilute the initial instructions.
+
+**Evidence Recording Order**: Recording evidence is the last mutation: every planned edit to the evidence snapshot's inputs lands before the final test record and review baseline; an edit afterward reopens them.
 
 **Checkpoint Correction Capture Protocol**: At natural reflection points — at session end, or before archiving a change — review the developer corrections you received this session and record each *generalizable* one via `prospec learn upsert` (a cross-cutting architecture, type-contract, testing, or security rule — never a one-off mock or business-string tweak; the deciding heuristic lives in the `prospec-learn` Skill's promotion-format reference under `.claude/skills/`, which you read with your file-reading tool rather than guessing from memory), naming its modules from `prospec/ai-knowledge/module-map.yaml` and terms from `prospec/ai-knowledge/_glossary.md`, with the `description` in the language the correction was given. Stay silent — do not interrupt the conversation or ask a blocking question — and surface a single line only when the command reports a promotion suggestion. Keep this ledger write a separate concern; never fold it into a feature commit.
 

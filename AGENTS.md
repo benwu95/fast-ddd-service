@@ -61,14 +61,6 @@ Plan Implementation - Convert User Story into technical implementation plan (pla
 **Triggers**: plan, architecture, technical plan, 規劃, 架構, 技術規劃
 **References**: `.agents/skills/prospec-plan/references/`
 
-### prospec-design
-
-Design Phase - Generate visual and interaction specs from proposal (Generate Mode) or extract specs from existing design tools (Extract Mode). Supports pencil/Figma/Penpot/HTML platforms. UI scope only — not architecture design (that is the plan station). Not for: 架構設計; API 設計.
-
-**Type**: Planning
-**Triggers**: UI spec, generate design, extract design, UI 規格, 產生設計, 擷取設計
-**References**: `.agents/skills/prospec-design/references/`
-
 ### prospec-tasks
 
 Break Down Tasks - Decompose implementation plan into an actionable task checklist (tasks.md) — the SDD station after plan, not a generic todo tool. Not for: 一般待辦清單; 個人任務追蹤.
@@ -103,7 +95,7 @@ Adversarial Code Review → Fix Loop - Between implement and verify, an independ
 
 ### prospec-verify
 
-Verify Implementation - Run 5+1 dimension audit (tasks, spec compliance, constitution, knowledge-implementation consistency, tests, design consistency) and assign quality grade (S/A/B/C/D) — the SDD gate before archive, not a plain test run. Not for: 只執行測試; 一般 QA.
+Verify Implementation - Run 5+1 dimension audit (tasks, spec compliance, constitution, knowledge-implementation consistency, tests, design conformance) and assign quality grade (S/A/B/C/D) — the SDD gate before archive, not a plain test run. Not for: 只執行測試; 一般 QA.
 
 **Type**: Execution
 **Triggers**: verify, audit, quality check, 驗證, 稽核, 品質檢查
@@ -160,7 +152,7 @@ Feedback Promotion Pipeline - Collect session corrections, repeated verify FAILs
 
 At the start of a session, run `prospec status` — it deterministically reports each in-progress
 change's name, current node, suggested next step, and blocking gates (the executable copy of
-`prospec/ai-knowledge/_status-lifecycle.md`). The prospec CLI (version ≥ 2.9.0)
+`prospec/ai-knowledge/_status-lifecycle.md`). The prospec CLI (version ≥ 2.11.0)
 is a required file for the prospec skills: when it is missing or too old, STOP and install/upgrade
 the standalone executable before running any skill — never substitute manual steps.
 
@@ -173,6 +165,8 @@ the standalone executable before running any skill — never substitute manual s
 - Read the named station's `SKILL.md` — the fallback path under `.agents/skills/` — on every transition and re-entry.
 
 Then read that station's references at the phases it names; loading a station never means its references arrived. If that read does not yield the station's instructions, STOP and name what is missing — never act on remembered rules, and never skip an entry gate or a receipt. Accumulated context is no substitute: a long session's diffs and logs dilute the initial instructions.
+
+**Evidence Recording Order**: Recording evidence is the last mutation: every planned edit to the evidence snapshot's inputs lands before the final test record and review baseline; an edit afterward reopens them.
 
 **Checkpoint Correction Capture Protocol**: At natural reflection points — at session end, or before archiving a change — review the developer corrections you received this session and record each *generalizable* one via `prospec learn upsert` (a cross-cutting architecture, type-contract, testing, or security rule — never a one-off mock or business-string tweak; the deciding heuristic lives in the `prospec-learn` Skill's promotion-format reference under `.agents/skills/`, which you read with your file-reading tool rather than guessing from memory), naming its modules from `prospec/ai-knowledge/module-map.yaml` and terms from `prospec/ai-knowledge/_glossary.md`, with the `description` in the language the correction was given. Stay silent — do not interrupt the conversation or ask a blocking question — and surface a single line only when the command reports a promotion suggestion. Keep this ledger write a separate concern; never fold it into a feature commit.
 

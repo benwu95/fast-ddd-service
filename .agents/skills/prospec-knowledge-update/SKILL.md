@@ -16,7 +16,7 @@ When triggered, briefly describe:
 
 ## Language Policy
 
-Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Keep code, identifiers, technical terms, and git commit messages in English.
+Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Free text you pass the CLI that lands in a change artifact follows the artifact language too, leaving its paths, commands, enum values and the fixed prefixes the CLI matches untranslated. Keep code, identifiers, technical terms, and git commit messages in English.
 ## CLI Prerequisite (required)
 
 > The prospec CLI is a required file for this skill — its deterministic steps call `prospec`
@@ -27,7 +27,7 @@ Write each generated document in the language the Constitution's Language Policy
    executable — the one-click installer script from the project README (macOS/Linux `install.sh`,
    Windows `install.ps1`) or a release binary from GitHub Releases; prospec is NOT published to
    npm. Then re-run this skill.
-3. **Version older than 2.9.0** → STOP. Report the installed vs required version
+3. **Version older than 2.11.0** → STOP. Report the installed vs required version
    and ask the user to upgrade, then re-run this skill.
 
 Hand-executing a CLI-owned mutation is NEVER the fallback — that re-introduces the
@@ -122,6 +122,8 @@ user block. The registry defines only marked sections; an unmarked user heading 
 
 README.md is the module knowledge entry point; link and maintain its affected sub-module and supplementary docs, including flow diagrams.
 
+Cite a REQ ID in what you write only when a Feature Spec already defines it — a requirement this change adds or modifies lands there at archive, so describe its behavior instead; existing citations need not be removed. After writing, run `prospec check` and confirm `req-references` reports no dangling reference before stamping in 3e.
+
 For CREATED modules (skeleton scaffolded by the CLI in Phase 1):
 - Fill `prospec/ai-knowledge/modules/{module}/README.md` with real content in the **canonical
   Recipe-First structure** defined in `prospec/ai-knowledge/_module-readme-conventions.md` (the
@@ -160,18 +162,20 @@ description, guessed paths). What remains is curation (judgment):
 
 #### 3d: prospec/index.md (CLI-generated — never hand-edit the auto block)
 
-On a project that curated in index.md, the first run **backfills** the curated content columns
-(Keywords/Aliases/Rationale/Description) into `module-map.yaml` (no-clobber) before regenerating.
+A project that curated in index.md has its first run **backfill** absent Aliases/Rationale/Description
+into `module-map.yaml` (explicit empties stay; failed migration warns, index kept).
 **Depends On** derives from `relationships.depends_on`; a module-map lacking it renders `—` until
 populated (re-run `prospec-knowledge-generate`).
 
 After the re-run, verify (read, don't write):
 - ADDED modules appear as Active
-- the Progressive Knowledge Loading Strategy section (outside the auto block) is intact
+- the Progressive Knowledge Loading Strategy section (outside the auto block) is intact under its untranslated heading
 
 #### 3e: Stamp Knowledge Freshness (`prospec knowledge verify`)
 
-After README review, run `prospec knowledge verify <modules...>` (Bash), the sole writer of `last_verified` in `prospec/ai-knowledge/module-map.yaml`. The affected modules to stamp are the modules `prospec knowledge update --change` reports as created or README-pending ∪ `metadata.related_modules` ∪ the modules a working-tree diff attributes through the module map (generated artifacts included); the diff-attributed ones no REQ named are the `stamp-only` subset Phase 1's report flags. Re-run the project's knowledge-sync mechanical gate, if any, after the feature commit and before pushing.
+Stage intended new files with `git add`; tracked edits need no staging.
+
+After README review, run `prospec knowledge verify <modules...>` (Bash), the sole writer of `last_verified` and `source_digest` in `prospec/ai-knowledge/module-map.yaml`. The affected modules to stamp are the modules `prospec knowledge update --change` reports as created or README-pending ∪ `metadata.related_modules` ∪ the modules a working-tree diff attributes through the module map (generated artifacts included); the diff-attributed ones no REQ named are the `stamp-only` subset Phase 1's report flags. Re-run the project's knowledge-sync mechanical gate, if any, after the feature commit and before pushing.
 
 ## Output Contract
 
@@ -217,7 +221,7 @@ Emit one line: `Met N/M | Unmet: <items> | Overall: PASS|WARN|FAIL | Next: <one-
 ## Next-Step Handoff
 
 After the Output Summary, recommend the next step in the SDD workflow order
-(`story → plan → tasks → implement → review → verify → knowledge-update → archive`, then periodic `learn`) — read
+(`story → plan → tasks → implement → knowledge-update → review → verify → archive`, then periodic `learn`) — read
 `metadata.yaml` status and `prospec/ai-knowledge/_status-lifecycle.md` (review and learn own no
 status transition, so follow this order, not status alone). Provide the direct, actionable Skill
 identity or CLI command for the next step (e.g. `prospec-plan`), allowing smooth continuation

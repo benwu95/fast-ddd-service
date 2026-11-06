@@ -1,4 +1,4 @@
-version: 2.9.0
+version: 2.11.0
 project:
   name: fast-ddd-service
 tech_stack:
@@ -20,8 +20,6 @@ agents:
   - claude
   - codex
   - antigravity
-knowledge:
-  base_path: prospec/ai-knowledge
 skill_triggers:
   prospec-explore:
     - 探索
@@ -37,10 +35,6 @@ skill_triggers:
     - 規劃
     - 架構
     - 技術規劃
-  prospec-design:
-    - UI 規格
-    - 產生設計
-    - 擷取設計
   prospec-tasks:
     - 拆解
     - 任務清單
@@ -108,9 +102,6 @@ skill_exclusions:
   prospec-plan:
     - 臨時架構討論
     - UI 設計
-  prospec-design:
-    - 架構設計
-    - API 設計
   prospec-tasks:
     - 一般待辦清單
     - 個人任務追蹤

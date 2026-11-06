@@ -50,7 +50,7 @@ subject_skips? }`, adopted **verbatim**.
   `test-provenance`, `constitution-severity`, `artifact-language`, `spec-counters`,
   `delta-spec-provenance`, `unjustified-budget-override`, `canonical-doc-drift`,
   `delta-spec-landing-fidelity`, `req-id-uniqueness`, `language-policy-drift`,
-  `skill-reference-map`.
+  `skill-reference-map`, `unsupported-module-path`.
 
 ### Key Check Interpretations
 
@@ -61,13 +61,14 @@ subject_skips? }`, adopted **verbatim**.
 | `spec-counters` | `warn` | Flags feature specs whose frontmatter `story_count`/`req_count` disagrees with actual headings. | Specs absent or unparseable. |
 | `unjustified-budget-override` | `fail` | Flags unjustified `token_budget` overrides and shipped budget keys that bind nothing. | No budget override configured. |
 | `canonical-doc-drift` | `warn` | Flags canonical project docs drifting from rendered canonical templates. | File absent. |
-| `delta-spec-landing-fidelity` | `fail` | Flags MODIFIED `**Spec:**` blocks omitting existing `WHEN/THEN` bullets without `**Dropped:**` declaration. | ADDED entries, no `**Spec:**` block, no changes dir. |
+| `delta-spec-landing-fidelity` | `fail` | Flags MODIFIED `**Spec:**` blocks that drop undeclared `WHEN/THEN` bullets or are empty. | ADDED entries, no `**Spec:**` block, no changes dir. |
 | `req-id-uniqueness` | `fail` | Flags duplicate REQ ID definitions across Feature Specs (slices grouped with parent). | Specs absent or unparseable. |
 | `language-policy-drift` | `warn` | Flags a Constitution whose Language Policy Description no longer matches the one generated for the resolved language scope, or still carries the old seed (the old English seed in an English-only project passes — nothing to migrate). | Constitution unreadable, no Language Policy principle, or no `**Description**:` field. |
-| `task-completion` | `warn`/`fail` | Tracks code-task completion in `tasks.md` (`[M]`/`[V]` excluded). | No tasks.md or not in git repo. |
+| `task-completion` | `warn`/`fail` | Tracks code-task completion in `tasks.md` (`[M]`/`[V]` excluded). | No tasks.md. |
 | `constitution-severity` | `warn` | Checks Constitution principles for RFC-2119 severity tags (`MUST`/`SHOULD`/`MAY`). | Constitution missing or empty. |
 | `knowledge-health` | `warn`/`fail` | Reports freshness and coverage; see `structural.knowledge_health` below. | Module map unavailable. |
 | `test-provenance` | `fail` | Validates test execution record, freshness, and exit code. | No test command configured (skips honestly). |
+| `unsupported-module-path` | `warn` | Names refused module paths, `generated_artifacts` patterns and top-level `exclude` entries with rewrites; config entries are checked without a module map. | `.prospec.yaml` outside the project or unreadable. |
 
 **Verdicts are definitive**: `prospec-verify` machine dimensions adopt check results verbatim; `skipped` maps to `not-adjudicated`, never `pass`.
 
@@ -86,24 +87,23 @@ structured facts behind its `detail` (additive, so a report without it still val
 ```jsonc
 {
   "modules": [
-    { "name": "lib", "last_src_commit": "<ISO|null>", "last_readme_commit": "<ISO|null>", "last_sub_module_commit": "<ISO>", "stale": true, "last_verified": "<ISO>" }
+    { "name": "lib", "last_src_commit": "<ISO|null>", "last_readme_commit": "<ISO|null>", "last_sub_module_commit": "<ISO>", "stale": true, "last_verified": "<ISO>", "freshness": { "basis": "digest-mismatch", … } }
   ],
   "coverage": { "documented": 23, "total": 23 }
 }
 ```
 
-- Per-module staleness lives on **each element of `modules[]`** as the boolean `stale`.
-  `knowledge_health` has **no** top-level `stale[]` array — to get the stale modules, filter
-  `knowledge_health.modules` by `.stale`: `knowledge_health.modules.filter(m => m.stale)`.
-- `last_verified` is the module's explicit confirmation time (`module-map.yaml`, stamped by
-  `prospec knowledge verify`), **absent** when none is declared. It is the freshness reference: for a
-  **documented** module `stale` recomputes as `last_src_commit` vs `last_verified` **by UTC calendar
-  day** (or stale when `last_verified` absent — a same-day commit reads fresh). A module with no
-  README is stale by the coverage rule — that verdict rides its `coverage gap` finding, not these timestamps.
-- `last_readme_commit` / `last_sub_module_commit` remain in the frozen shape (the latter **absent**
-  when no sub-module, never null-filled) but no longer drive `stale` — reported for downstream continuity.
-- `coverage` is `{ documented, total }` module README counts.
-- The whole object is **optional** (absent when the module map is unavailable) → treat as "no freshness facts", not all-fresh.
+- Staleness is the boolean `stale` on **each element of `modules[]`**; there is **no** top-level
+  `stale[]` — filter: `knowledge_health.modules.filter(m => m.stale)`.
+- `last_verified`: the confirmation time `prospec knowledge verify` stamps; **absent** when undeclared.
+- `freshness` `{ basis, recorded_digest?, current_digest?, reason? }` reproduces `stale` (true unless
+  `basis` is `digest-match`). `basis` by precedence: `unverified` (no README or parsable `last_verified`),
+  `no-digest` (no current-version `source_digest`), `unavailable` (`reason` says why), then
+  `digest-match` / `digest-mismatch`. No README also yields a `coverage gap` finding.
+- The commit-time keys stay for continuity (`last_sub_module_commit` **absent** without sub-modules,
+  never null-filled), never drive `stale`, and are null/absent when commit times are unavailable (shallow, unborn HEAD).
+- `coverage` is `{ documented, total }` README counts. The whole object is **optional** (absent without
+  a module map) → "no freshness facts", not all-fresh.
 
 ## `structural.constitution` (optional) — the rule inventory verify audits against
 

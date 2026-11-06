@@ -34,6 +34,7 @@ The Verifier audits the planning artifacts across five orthogonal dimensions:
   - **Bidirectional Mapping**: Is every User Story and acceptance scenario in `proposal.md` mapped to at least one REQ in `delta-spec.md`?
   - **Delta Clarity**: For MODIFIED requirements, are Before, After, Reason, and `**Spec:**` blocks clearly articulated and testable?
   - **No Orphaned Scope**: Does `delta-spec.md` contain ungrounded requirements outside the proposal's scope?
+  - **Scope questions**: a concern holding only under a requirement the proposal does not state meets no FLAWS condition; report it as a WARN naming the scope question.
   - **Quantitative Target Baseline**: For each quantitative acceptance target in proposal Success Criteria or delta-spec requirements, does the plan record the measured HEAD/version, baseline value, target project's measurement command, target and gap? For an unmet gap, does it name a closing mechanism and estimated improvement distinct from measured evidence, so feasibility can be assessed against the target?
   - If the baseline already meets the target, record the value and gap; no closing mechanism is required. With no quantitative acceptance target, no baseline is required. Identifiers, versions and non-acceptance examples do not alone trigger this check. If measurement is unavailable, disclose the reason; never invent a value or use unmeasured zero — a missing measured baseline remains FLAWS.
 
@@ -56,6 +57,8 @@ The Verifier audits the planning artifacts across five orthogonal dimensions:
 | **FLAWS** (FAIL) | Structural violation (broken layering, unhandled high-risk blast radius, missing rollback on critical mutation, untraced User Story, an existing owner bypassed without a stated rationale, a `standard` plan missing its Simpler Alternative, a quantitative acceptance target missing its measured baseline, or an unmet gap without a closing mechanism). | Revise `plan.md`/`delta-spec.md` to resolve flaws. |
 
 > The Reuse & Single-Source trigger above is self-contained: any unargued bypass is FLAWS here, whatever path the new surface sits on — a plan page is cheap to widen. Its review-stage counterpart, the single-source bypass criterion during adversarial code review, is deliberately narrower and is only named here, not restated.
+
+**Wording-only rounds**: when the plan is to be revised again and, once FLAWS are triaged, the remaining findings are wording only, stop revising round by round. Classify every clause of the affected text once as holding, imprecise or false; fix only the false clauses and the imprecise ones this change rewrote, deleting by default; then re-verify. The loop has converged when that round reports no FLAWS and no warning names a false clause.
 
 ---
 

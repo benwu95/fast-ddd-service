@@ -23,13 +23,13 @@ When triggered, briefly describe:
    executable — the one-click installer script from the project README (macOS/Linux `install.sh`,
    Windows `install.ps1`) or a release binary from GitHub Releases; prospec is NOT published to
    npm. Then re-run this skill.
-3. **Version older than 2.9.0** → STOP. Report the installed vs required version
+3. **Version older than 2.11.0** → STOP. Report the installed vs required version
    and ask the user to upgrade, then re-run this skill.
 
 Hand-executing a CLI-owned mutation is NEVER the fallback — that re-introduces the
 nondeterministic serialization this contract exists to remove.
 
-Evidence uses `snapshot-v2` / `repository-inputs-v2`: repository input content, independent of staging and equivalent commit history. Complete Knowledge/count/generated-asset sync before the final review, test record and verification. A legacy record needs one real revalidation; an equivalent commit alone needs no re-record.
+Evidence uses `snapshot-v2` / `repository-inputs-v2`: working-tree content of git index members. Unchanged members and effective content preserve evidence across staging and equivalent commits. Revalidate legacy records once.
 
 ## Startup Loading
 
@@ -54,7 +54,7 @@ Evidence uses `snapshot-v2` / `repository-inputs-v2`: repository input content, 
 - **B — single reviewer, multi-lens (default)**: one fresh-context reviewer covers every must-run lens in a single pass. Token-friendly; independence from the implementer is already satisfied.
 - **A — parallel lenses (opt-in)**: N independent lens agents run concurrently — available only when the capability line below resolves `can_spawn_subagent` to yes; it has no single-context equivalent. Use for large or high-risk diffs, or Scale=Full. Higher first-round cost buys maximum inter-lens independence.
 
-**Route the reviewer to the strongest model / agent tier the harness makes available** — a review gate's detection power is bounded by its reviewer, so the strongest available tier on a fresh context is the goal (named abstractly — never a specific model or vendor; "strongest available" is resolved by the harness). When you record the review baseline (`prospec check --record-review`), declare the grading context honestly with `--graded-by`: `fresh-subagent` for an independent context, `in-session` when the same session that implemented the change also reviewed it — recorded into `review_provenance.graded_by` as the honest grading-context record that informs the downstream verify station (the verify grade cap itself keys on each verify dimension's own `graded_by`).
+**Route the reviewer to the strongest model / agent tier the harness makes available**, in fresh context — reviewer strength bounds detection. Name the tier abstractly, never a model or vendor. Record the baseline (`prospec check --record-review`) with honest `--graded-by`: `fresh-subagent` for an independent context, `in-session` for the implementing session. The CLI stores `review_provenance.graded_by` for downstream verify; verify's grade cap keys on each dimension's own `graded_by`.
 
 ### Review Lenses
 
@@ -110,14 +110,18 @@ Emit this round's findings as a `ReviewFindingsInputSchema` JSON array — whose
 
 > **Review artifact generation**: Follow `prospec review merge` for artifact generation. The CLI records this round's counts at merge time; `change log` only closes the round and audits self-reported counts.
 
+Read each gate command's whole output before the next step — circuit-breaker, escalation and refusal messages can appear mid-output, even when the command succeeds — and judge whether a state-changing step succeeded by its own exit code, not by a command chained after it; run each such step as its own command.
+
 ### Review Provenance (machine gate)
+
+Stage intended new files with `git add`; tracked edits need no staging.
 
 Review must leave a machine-queryable record so `prospec-verify`'s Entry Gate can prove it ran and is still current:
 
-1. **Every round** — including a **review-clean** round (0 critical / 0 major) and **circuit-breaker tripped rounds** — close the round via `prospec change log --skill prospec-review --result PASS|WARN [--warning "circuit breaker tripped: <type>"|"<unresolved item>"]` (Bash; result `PASS` when clean, `WARN` when unresolved majors/FAIL or circuit-breaker trips carry forward). The CLI records this round's counts at merge time; `change log` only closes the round and audits self-reported counts. A clean review that records nothing is indistinguishable from a review that never ran.
-2. **At loop convergence** (review-clean or escalation), run `prospec check --record-review --graded-by <fresh-subagent|in-session>` — it code-computes the reviewed change's digest and writes `review_provenance` (with the declared grading context) to `metadata.yaml`. This is the baseline the `review-provenance` drift check compares against.
+1. **Every round** — including a **review-clean** round (0 critical / 0 major) and **circuit-breaker tripped rounds** — close the round via `prospec change log --skill prospec-review --result PASS|WARN [--warning "circuit breaker tripped: <type>"|"<unresolved item, in the artifact language>"]` (Bash; result `PASS` when clean, `WARN` when unresolved majors/FAIL or circuit-breaker trips carry forward). The CLI records this round's counts at merge time; `change log` only closes the round and audits self-reported counts. A clean review that records nothing is indistinguishable from a review that never ran.
+2. **At loop convergence** (review-clean or escalation), run `prospec check --record-review --graded-by <fresh-subagent|in-session>` — the CLI writes its computed digest and grading context to `review_provenance` in `metadata.yaml`. This is the baseline the `review-provenance` drift check compares against.
 
-Because the digest is code-computed, editing the change's code after this point flips `review-provenance` to stale — `prospec-verify` will then require a fresh review round before it runs.
+Later input edits stale `review-provenance` and require a fresh review.
 
 ## Escalation Decision (CLI-Owned)
 
@@ -180,7 +184,7 @@ Verify the output against this skill's **site-specific** Constitution rule (**de
 ## Next-Step Handoff
 
 After the Output Summary, recommend the next step in the SDD workflow order
-(`story → plan → tasks → implement → review → verify → knowledge-update → archive`, then periodic `learn`) — read
+(`story → plan → tasks → implement → knowledge-update → review → verify → archive`, then periodic `learn`) — read
 `metadata.yaml` status and `prospec/ai-knowledge/_status-lifecycle.md` (review and learn own no
 status transition, so follow this order, not status alone). Provide the direct, actionable Skill
 identity or CLI command for the next step (e.g. `prospec-plan`), allowing smooth continuation

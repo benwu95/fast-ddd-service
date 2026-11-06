@@ -15,7 +15,7 @@ When triggered, briefly describe:
 
 ## Language Policy
 
-Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Keep code, identifiers, technical terms, and git commit messages in English.
+Write each generated document in the language the Constitution's Language Policy rule assigns to **its path** — change artifacts and their archived summaries in the project's artifact language, the trust zone (Knowledge base, Feature Specs, index) in Traditional Chinese (Taiwan). One skill run may write both. Free text you pass the CLI that lands in a change artifact follows the artifact language too, leaving its paths, commands, enum values and the fixed prefixes the CLI matches untranslated. Keep code, identifiers, technical terms, and git commit messages in English.
 ## CLI Prerequisite (required)
 
 > The prospec CLI is a required file for this skill — its deterministic steps call `prospec`
@@ -26,7 +26,7 @@ Write each generated document in the language the Constitution's Language Policy
    executable — the one-click installer script from the project README (macOS/Linux `install.sh`,
    Windows `install.ps1`) or a release binary from GitHub Releases; prospec is NOT published to
    npm. Then re-run this skill.
-3. **Version older than 2.9.0** → STOP. Report the installed vs required version
+3. **Version older than 2.11.0** → STOP. Report the installed vs required version
    and ask the user to upgrade, then re-run this skill.
 
 Hand-executing a CLI-owned mutation is NEVER the fallback — that re-introduces the
@@ -63,6 +63,7 @@ Default to **Draft-First**:
 - **Draft-First mode (default)**: Match the prompt to index keywords and relevant Feature Specs. Draft Role, Feature and Constraints. Ground Background/Value in traceable input or actual code investigation; clear intent alone is insufficient. Record original source/evidence; verification preserves `source: ai-proposed`. If a key boundary is severely ambiguous, ask **one question at a time**.
 - Reproduction evidence (steps, expected/actual behavior, conclusion) can skip deep interviewing, not the Premise structure. Missing evidence stays pending → `prospec-explore`.
 - **Interactive mode (`--interactive`)**: Guide the user through 3-4 focused questions to collect Background, Role, Feature, Value, and Constraints.
+- Scope a series so no change keeps behavior only for a later one to remove: that behavior and its removal are one change, which Draft-First records in Stated Assumptions.
 
 > **Phase 1 Gate** — proceed when:
 > - [ ] Background, Role, Feature, and Value are captured with evidence or explicitly pending hypotheses
@@ -185,7 +186,7 @@ Save proposal.md. Present the completed proposal summary to the user for single-
 ## Next-Step Handoff
 
 After the Output Summary, recommend the next step in the SDD workflow order
-(`story → plan → tasks → implement → review → verify → knowledge-update → archive`, then periodic `learn`) — read
+(`story → plan → tasks → implement → knowledge-update → review → verify → archive`, then periodic `learn`) — read
 `metadata.yaml` status and `prospec/ai-knowledge/_status-lifecycle.md` (review and learn own no
 status transition, so follow this order, not status alone). Provide the direct, actionable Skill
 identity or CLI command for the next step (e.g. `prospec-plan`), allowing smooth continuation

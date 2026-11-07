@@ -1,7 +1,15 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
-from fast_ddd.batch import BatchItem, BatchResult, apply_batch, check_version, create_batch
+from fast_ddd.batch import (
+    BatchItem,
+    BatchResult,
+    apply_batch,
+    apply_event_batch,
+    check_version,
+    create_batch,
+)
+from fast_ddd.events import DomainEvent
 from tests.adapter.models import Order, OrderRepository
 
 
@@ -36,3 +44,11 @@ class OrderUseCase:
         return await apply_batch(
             self._repository, Order, items, lambda order, reason: order.void(reason)
         )
+
+    async def apply_events[E: DomainEvent](
+        self,
+        events: Sequence[E],
+        target: Callable[[E], UUID],
+        apply: Callable[[Order, E], None],
+    ) -> list[Order]:
+        return await apply_event_batch(self._repository, Order, events, target, apply)

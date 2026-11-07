@@ -83,7 +83,7 @@ def unit_of_work_context(
 
 
 @contextmanager
-def event_scope(*, event_id: UUID, organization_id: UUID | None) -> Generator[None]:
+def event_scope(*, event_id: UUID | None, organization_id: UUID | None) -> Generator[None]:
     tokens = (
         _parent_event_id.set(event_id),
         _organization_id.set(organization_id),

@@ -17,6 +17,7 @@
 
 ## Public API
 - `SessionProvider`、`execute()`、`run_batch()` — 交易與 command 執行。
+- `configure(max_event_chain_depth=10, max_events_per_unit_of_work=10_000)` — 連鎖上限；超過丟 `EventChainLimitExceededError`。
 - `RepositoryBase` — 服務實作 entity／model 映射與 scope。
 - `integration_message()`、`publish_after_commit()` — 跨服務發送。
 - `TaskQueue.enqueue()` — 工作與業務資料原子提交。
@@ -29,13 +30,14 @@
 
 ## Modification Guide
 1. 新增 repository → 宣告 `RepositoryBase[Id, A, M]`、tenant scope → model 映射與 tenant tests。
-2. 修改 rollback → session journal／mark／restore → metadata、事件順序、hook 重入與 commit 失敗測試。
+2. 修改 rollback → session journal／mark／restore（含 `Mark.dispatched`）→ metadata、事件順序、hook 重入、連鎖計數與 commit 失敗測試。
 3. 修改外部 I/O → HTTP client／messaging → producer／consumer 與 status／error metrics 測試。
 
 ## Ripple Effects
-- 事件 dispatch 在交易內；after-commit hooks 在外層 commit 後執行。
+- 事件 dispatch 在交易內，分派前檢查連鎖世代與事件總數；after-commit hooks 在外層 commit 後執行。
 
 ## Pitfalls
+- 事件總數跨同一 UoW 的多次 `run_batch` 累計、隨 SAVEPOINT 回復；超限在 `run_batch` 整批階段與巢狀的逐筆階段丟出；最外層的逐筆階段只讓該筆成為 `UnexpectedFailure`。
 - load 與 save 都檢查 tenant；`system_context(reason)` 才可明確跳過組織限制。
 - after-commit 發送沒有 durable outbox；commit 後程序終止可能遺失訊息。
 - PgQueuer 使用 session 的同一 raw connection；dedupe 衝突須受 SAVEPOINT 保護。

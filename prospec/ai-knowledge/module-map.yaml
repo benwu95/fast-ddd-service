@@ -22,8 +22,8 @@ modules:
         - template
         - plugin
       used_by: []
-    last_verified: 2026-11-06T14:29:19.994Z
-    source_digest: source-v1:74b28e44c0d7680537f7d2394f2c7b52d235b88006aebc7a54ce5e67755e5ead
+    last_verified: 2026-11-07T03:40:05.452Z
+    source_digest: source-v1:120333bfbb217a52d50545f964dfdfb53f57d601375f102fc1a06f7b3d517a48
   - name: kernel
     description: 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools
     paths:
@@ -51,8 +51,8 @@ modules:
       used_by:
         - example
         - template
-    last_verified: 2026-11-06T20:01:21.809Z
-    source_digest: source-v1:425c3370589b85e07c3aeba6fe8cea57c8b008a458edcbc1262e3d8d6e105f2f
+    last_verified: 2026-11-07T03:40:05.452Z
+    source_digest: source-v1:48f71dce3159382fa04cb3546912f234e798eab93dfbc0c31e9f3169bf9a23f2
   - name: template
     description: 產生可直接客製化的單服務骨架，驗證更新合併與框架 example 漂移
     paths:
@@ -83,8 +83,8 @@ modules:
       used_by:
         - example
         - plugin
-    last_verified: 2026-11-06T17:52:39.180Z
-    source_digest: source-v1:d8305b96f753f803335f1bc48486b4c18bddc50a8e08cb567ec0ea1262dfb6ab
+    last_verified: 2026-11-07T03:40:05.452Z
+    source_digest: source-v1:063d65f6eaa7e6de8d0c9e1480f1b9c123be52fd348b2c60811c482bd374b079
   - name: plugin
     description: 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 fast-ddd-init
     paths:

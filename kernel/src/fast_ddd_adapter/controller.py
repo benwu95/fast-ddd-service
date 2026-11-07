@@ -8,6 +8,7 @@ from sqlalchemy.exc import DBAPIError
 from fast_ddd.aggregate import AggregateRoot
 from fast_ddd.batch import BatchItem, BatchResult
 from fast_ddd.errors import DomainError, LockConflict
+from fast_ddd.events import DomainEvent
 from fast_ddd_adapter.db_errors import to_domain_error
 from fast_ddd_adapter.infrastructure import infrastructure
 from fast_ddd_adapter.session import SessionProvider, current_session_provider
@@ -21,6 +22,10 @@ class EventHandlerFailedError(RuntimeError):
 
 class TransientBatchFailureError(RuntimeError):
     """A non-HTTP batch had temporary failures; retry the whole unit of work."""
+
+
+class EventChainLimitExceededError(RuntimeError):
+    """Event dispatch went deeper or produced more events than configure() allows."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,12 +54,31 @@ async def _run_command[T](provider: SessionProvider, operation: Callable[[], Awa
             raise
         raise domain_error from error
     events = provider.take_pending_events(mark)
-    with provider.protect(provider.saved_since(mark)):
+    if not events:
+        return result
+    _check_event_chain(provider, events)
+    with provider.protect(provider.saved_since(mark)), provider.dispatching(len(events)):
         try:
             await infrastructure().event_bus.dispatch(events)
         except DomainError as error:
             raise EventHandlerFailedError(str(error)) from error
     return result
+
+
+def _check_event_chain(provider: SessionProvider, events: list[DomainEvent]) -> None:
+    limits = infrastructure()
+    generation = provider.dispatch_depth + 1
+    if generation > limits.max_event_chain_depth:
+        raise EventChainLimitExceededError(
+            f"event generation {generation} exceeds max_event_chain_depth="
+            f"{limits.max_event_chain_depth} (first event: {events[0].name})"
+        )
+    total = provider.dispatched_events + len(events)
+    if total > limits.max_events_per_unit_of_work:
+        raise EventChainLimitExceededError(
+            f"{total} events exceed max_events_per_unit_of_work="
+            f"{limits.max_events_per_unit_of_work} (first event: {events[0].name})"
+        )
 
 
 async def execute[T](operation: Callable[[], Awaitable[T]]) -> T:
@@ -77,16 +101,20 @@ async def run_batch[Id: UUID, A: AggregateRoot, P](
 ) -> BatchOutcome[Id, A]:
     """Whole batch first; on an unexpected failure, fall back to one unit of work per item.
 
-    Lock conflicts in the whole-batch phase fail the whole request. Non-HTTP callers pass
-    ``raise_on_transient`` so a temporary per-item failure retries the whole message.
+    Lock conflicts and an exceeded event chain limit in the whole-batch phase fail the whole
+    request. In the fallback, an exceeded limit fails only its item when each item is its own
+    unit of work; nested in another unit of work it is raised, since recording it as an item
+    result would let the enclosing unit of work commit the runaway chain's caller. Non-HTTP
+    callers pass ``raise_on_transient`` so a temporary per-item failure retries the whole message.
     """
+    nested = current_session_provider().is_active
     try:
         result = await execute(lambda: batch(items))
-    except LockConflict:
+    except (LockConflict, EventChainLimitExceededError):
         raise
     except Exception:
         logger.warning("batch failed as a whole, falling back to one item at a time", exc_info=True)
-        outcome = await _run_one_by_one(items, single)
+        outcome = await _run_one_by_one(items, single, nested=nested)
     else:
         outcome = BatchOutcome[Id, A]()
         for item in items:
@@ -100,7 +128,10 @@ async def run_batch[Id: UUID, A: AggregateRoot, P](
 
 
 async def _run_one_by_one[Id: UUID, A: AggregateRoot, P](
-    items: Sequence[BatchItem[Id, P]], single: Callable[[BatchItem[Id, P]], Awaitable[A]]
+    items: Sequence[BatchItem[Id, P]],
+    single: Callable[[BatchItem[Id, P]], Awaitable[A]],
+    *,
+    nested: bool,
 ) -> BatchOutcome[Id, A]:
     outcome = BatchOutcome[Id, A]()
     for item in items:
@@ -109,6 +140,8 @@ async def _run_one_by_one[Id: UUID, A: AggregateRoot, P](
         except DomainError as error:
             outcome.results[item.id] = error
         except Exception as error:
+            if nested and isinstance(error, EventChainLimitExceededError):
+                raise
             logger.exception("batch item %s failed unexpectedly", item.id)
             outcome.results[item.id] = UnexpectedFailure(error)
     return outcome

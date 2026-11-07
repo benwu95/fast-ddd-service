@@ -3,7 +3,9 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from fast_ddd.aggregate import AggregateRoot
+from fast_ddd.context import event_scope
 from fast_ddd.errors import AggregateNotFound, DomainError, VersionMismatch
+from fast_ddd.events import DomainEvent
 from fast_ddd.repository import Repository
 
 
@@ -52,6 +54,36 @@ async def apply_batch[Id: UUID, A: AggregateRoot, P](
         result.succeeded[item.id] = aggregate
     await repository.save_many(list(result.succeeded.values()))
     return result
+
+
+async def apply_event_batch[Id: UUID, A: AggregateRoot, E: DomainEvent](
+    repository: Repository[Id, A],
+    aggregate_type: type[A],
+    events: Sequence[E],
+    target: Callable[[E], Id],
+    apply: Callable[[A, E], None],
+) -> list[A]:
+    """Apply each event to its target, loading and saving every target once; all or nothing.
+
+    Each application runs in its event's scope, so new events point to their own source.
+    """
+    if not events:
+        return []
+    ids = list(dict.fromkeys(target(event) for event in events))
+    loaded = await repository.load_many(ids, lock=True)
+    for aggregate_id in ids:
+        if aggregate_id not in loaded:
+            raise AggregateNotFound(
+                namespace=aggregate_type.error_namespace(),
+                aggregate_type=aggregate_type.aggregate_type(),
+                aggregate_id=aggregate_id,
+            )
+    for event in events:
+        with event_scope(event_id=event.event_id, organization_id=event.organization_id):
+            apply(loaded[target(event)], event)
+    aggregates = [loaded[aggregate_id] for aggregate_id in ids]
+    await repository.save_many(aggregates)
+    return aggregates
 
 
 async def create_batch[Id: UUID, A: AggregateRoot, P](

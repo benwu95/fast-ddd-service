@@ -392,9 +392,11 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 ```
 整批處理階段：開啟 transaction（或 SAVEPOINT），呼叫 use case 的批次方法（步驟 1–3），再分派事件（步驟 4）
   - 鎖定逾時、deadlock → 整個請求回 409（見下方）
+  - 超過事件連鎖上限 → 整個請求失敗，不進入 fallback（見下方）
   - 其他任何例外（IntegrityError、event handler 失敗、domain 方法的 bug 等）→ rollback，進入逐筆 fallback
 逐筆 fallback 階段：對每一筆各開一個 transaction（或 SAVEPOINT），呼叫 use case 的單筆方法並分派事件
   - 失敗的那一筆 rollback；結果依例外類型為 DomainError（含轉換後的資料庫錯誤）或 UnexpectedFailure
+  - 例外：runner 是巢狀時，超過事件連鎖上限往上丟出（見下方）
 ```
 
 - rollback（不論是 transaction 還是 SAVEPOINT）時，`SessionProvider` 一併丟棄該範圍內暫存的 MQ 訊息；訊息只在最外層 commit 之後發送（第 11 節）。
@@ -409,10 +411,14 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 - **`SessionProvider` 的規則**（修正原版）：只有最外層 scope（計數歸零時）可以 commit 或 rollback；巢狀 scope 遇到例外只往上丟，不呼叫 `rollback()`；`__aexit__` 收到例外時 rollback，沒有例外才 commit。原版的 `EventHandlerHelper.connect_db_session` 在巢狀 scope 中直接 rollback、`__aexit__` 不檢查例外就 commit，兩者都不沿用。
 - **巢狀 scope 不可以吞掉資料庫例外**：PostgreSQL 在 SQL 失敗後會把整個 transaction 標成 aborted，之後的語句全部失敗。巢狀呼叫者如果需要「這一段失敗也不影響外層」，必須用 SAVEPOINT（`session.begin_nested()`）包住那一段，kernel 的 `SessionProvider` 提供對應的 `savepoint()`。
 - **資料庫錯誤的轉換在 adapter，單筆和批次都一樣**：controller base（單筆）和批次 runner（逐筆模式）都依 constraint 名稱（第 7.2 節的 `naming_convention`）把 IntegrityError 轉成 `DomainError`，例如主鍵重複轉成 `ALREADY_EXISTS`。constraint 名稱從 `IntegrityError.orig.__cause__.constraint_name`（asyncpg 的例外）取得，錯誤類型依 `sqlstate` 判斷：`23505` 唯一鍵重複、`55P03` 鎖定逾時（`lock_not_available`）、`40P01` deadlock。（Phase 1 spike 已實測 23505 和 55P03。）
-- **逐筆模式中的未預期例外**（例如 event handler 再次失敗）：該筆結果為 500 `server.internal_error`，不附例外內容，例外寫進 log；其他筆數照常處理。
+- **逐筆模式中的未預期例外**（例如 event handler 再次失敗）：該筆結果為 500 `server.internal_error`，不附例外內容，例外寫進 log；其他筆數照常處理。巢狀 runner 遇到超過事件連鎖上限時例外（見下方）。
 - **鎖定逾時或 deadlock**：runner 的規則以「階段 + 例外類型」決定，不以步驟決定（整批處理階段中，步驟 1–3 在同一次 use case 呼叫內，runner 無法分辨例外來自哪一步）：
   - 整批處理階段發生時：整個請求回 409 `concurrency.lock_conflict`，不進入 fallback。鎖定衝突是暫時性的，逐筆重試只會再撞一次，由 client 重送整批即可。
   - 逐筆 fallback 階段發生時：只有該筆結果為 409 `concurrency.lock_conflict`（adapter 轉成 `ErrorKind.CONFLICT` 的 `DomainError`）。
+- **超過事件連鎖上限**（見下方「連鎖的上限」）：以「階段 + 是否巢狀」決定。
+  - 整批處理階段發生時：直接往上丟出 `EventChainLimitExceededError`，不進入 fallback。上限擋的是失控的連鎖，不是某一筆的業務失敗：深度超限是確定性的循環，逐筆重試只會重演。取捨：最外層批次的每一筆各自是 unit of work，整批的事件總數超限時，即使每一筆單獨執行都在上限內，整個請求仍然失敗（HTTP 500），不降級為逐筆處理。
+  - 逐筆 fallback 階段、runner 是最外層時：每一筆各自是 unit of work，只有超限的那一筆失敗，結果為 `UnexpectedFailure`（207 內的 500），其他筆數照常 commit；如果改成整個請求回 500，已經 commit 的筆數就成了第 9.1 節「部分成功時回錯誤」的問題。
+  - 逐筆 fallback 階段、runner 是巢狀時（MQ subscriber、task、event handler 中）：往上丟出，讓外層的 unit of work rollback。逐筆 fallback 和整批處理在同一個 unit of work，事件總數繼續累計；如果記成單筆失敗，event handler 中巢狀的 `run_batch` 會吸收循環，外層照常 commit。
 - **transaction 由誰開啟**：HTTP 端，第 12.6 節的 middleware 只建立新的 `SessionProvider`，不開啟 transaction；最外層的 scope 由 controller base（單筆操作）或批次 runner（批次操作）開啟。MQ 端由 kernel 的 subscriber wrapper 開啟最外層 scope（見第 11 節）。
 - **`SessionProvider` 的 after-commit 和 rollback hook**：`SessionProvider` 提供兩種 hook，MQ 訊息暫存是 after-commit hook 的一種用法，即時推播（第 14.3 節）也是。
   - `after_commit(callable)`：最外層 commit 成功後依序執行，只能做 I/O（發送 MQ 訊息、推播），不可以再寫資料庫。註冊時記在目前的 scope，rollback 和 SAVEPOINT 回復時，該範圍內註冊的 hook 一併丟棄。
@@ -433,12 +439,19 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 - 逐一處理的 `bus.subscribe(EventType, handler)` 是預設寫法。成本：commit 只有最外層一次；handler 每次透過 controller 呼叫 use case 約 5 次往返（SAVEPOINT、load、flush 的 UPDATE 與 domain_event INSERT、RELEASE），總量約為「批次筆數 × 每筆的連鎖事件數 × 5」，隨筆數線性成長。連鎖的扇出 f、深度 d 帶來的 f 的 d 次方和是否批次無關，單筆指令就已經如此。
 - **批次 handler**（Phase 3 加入 kernel）：`bus.subscribe_batch(EventType, handler)`，handler 一次收到 `list[EventType]`。適用於 handler 有資料庫 I/O 且批次筆數大的情況，採用時機寫在 recipe。
   - **分派**：`_run_command` 本來就一次取出整個 use case 呼叫產生的事件再分派，所以不需要另外的排程器：批次 handler 透過 controller 對目標執行批次 use case 時，下一代事件也整批產生、整批分派。每一代的往返次數固定，總量只和連鎖深度與分組數有關，不隨批次筆數成長。
-  - **分組**：依事件類型和 `organization_id` 分組，每組呼叫一次，組內保留事件順序。`event_scope` 會設定租戶 context，同一組混入不同組織時租戶過濾會出錯。同一次分派中，先依事件順序執行逐一處理的 handler，再依各組第一個事件出現的順序執行批次 handler。
-  - **同一目標的多個事件**：`run_batch` 以 422 拒絕重複的 id，所以 `fast_ddd` 另外提供 `apply_event_batch` helper：依目標 id 去重後以 `load_many(lock=True)` 載入一次，依事件順序套用 domain 方法，最後 `save_many` 一次；同一目標被兩個事件修改時，version 只遞增一次。每次套用都包在該事件的 `event_scope` 中，新事件的 `parent_event_id` 才會指向各自的來源事件。找不到目標時丟出例外。
-  - **失敗**：handler 的失敗不是指令本身的業務拒絕（見上方「event handler 丟出的 `DomainError`」），所以批次 handler 全有或全無，任何一筆失敗就丟出例外。最外層 runner 進入逐筆 fallback 後，批次 handler 每次只收到一個事件，結果和逐一處理相同；最壞成本約為整批嘗試加上逐筆處理，約為原本的兩倍。
+  - **分組**：依事件類型和 `organization_id` 分組，每組呼叫一次，組內保留事件順序。`event_scope` 會設定租戶 context，同一組混入不同組織時租戶過濾會出錯。同一次分派中，先依事件順序執行逐一處理的 handler，再依各組第一個事件出現的順序執行批次 handler。分組依事件的確切類型（與逐一處理的 handler 相同，子類別不併入父類別），`organization_id` 為 None 的事件自成一組。
+  - **context**：批次 handler 在該組組織的租戶 context 中執行（豁免一律關閉）。組內只有一個事件時，來源事件（`parent_event_id`）設為該事件，所以每筆命令只產生一個該類型事件時，逐筆 fallback 的結果和逐一處理的 handler 相同；組內有多個事件時不設定來源事件，handler 不經 `apply_event_batch` 自行產生的事件 `parent_event_id` 為 None，不會指向錯誤的來源。逐事件的因果只由 `apply_event_batch` 保證。
+  - **同一目標的多個事件**：`run_batch` 以 422 拒絕重複的 id，所以 `fast_ddd.batch` 另外提供 `apply_event_batch(repository, aggregate_type, events, target, apply) -> list[A]` helper：依目標 id 去重後以 `load_many(lock=True)` 載入一次，依事件順序套用 domain 方法，最後 `save_many` 一次；同一目標被兩個事件修改時，version 只遞增一次。每次套用都包在該事件的 `event_scope` 中，新事件的 `parent_event_id` 才會指向各自的來源事件。任何目標找不到時丟出 `AggregateNotFound`，不套用也不儲存；domain 方法的 `DomainError` 直接往上丟。不比對 version（event handler 不帶 `expected_version`）。
+  - **失敗**：handler 的失敗不是指令本身的業務拒絕（見上方「event handler 丟出的 `DomainError`」），所以批次 handler 全有或全無，任何一筆失敗就丟出例外。最近一層包住它、正在整批處理階段的 runner（不論是否巢狀）進入逐筆 fallback（超過事件連鎖上限除外，見上方批次 runner）後，每筆命令只產生一個該類型事件時，批次 handler 每次只收到一個事件，結果和逐一處理相同（一筆命令產生多個同類型、同組織的事件時仍會成組，因果只由 `apply_event_batch` 保證）；最壞成本約為整批嘗試加上逐筆處理，約為原本的兩倍。沒有包住它的 runner 時（單筆的 controller base），整個指令失敗：HTTP 回 500，MQ 重新排隊。
   - **順序**：分派由深度優先（A1→B1→A2→B2）變成廣度優先（A1、A2→B1、B2）。同一個 aggregate 的事件順序不變；handler 不得依賴不同 aggregate 之間的處理順序。
   - 「event handler 不可以再儲存這次指令本身儲存的 aggregate」的規則照樣適用。
-- **連鎖的上限**（逐一處理和批次 handler 都適用）：kernel 限制同一個 unit of work 中事件分派的巢狀深度（預設 10 代）和事件總數（預設 10,000），超過時丟出例外，避免 A→B→A 的循環或扇出失控；兩個值可由 `fast_ddd_adapter.configure(...)` 調整。扇出會鎖住大量資料列時（例如 100 筆各觸發 10 個目標），handler 改為在同一個交易中排入 TaskQueue 分段處理（第 11.1 節）。
+- **連鎖的上限**（逐一處理和批次 handler 都適用）：kernel 限制同一個 unit of work 中事件分派的巢狀深度（預設 10 代）和事件總數（預設 10,000），超過時丟出 `EventChainLimitExceededError`，避免 A→B→A 的循環或扇出失控。
+  - **世代**：最外層指令的 use case 產生的事件是第 1 代，handler 透過 controller 呼叫 use case 產生的事件是下一代；沒有事件的分派不算一代。第 10 代允許，第 11 代分派前丟出例外。
+  - **總數**：計入同一個 unit of work 中交給 event bus 的每一個事件（不論有沒有 handler 訂閱），剛好等於上限時允許。計數由 `SessionProvider` 持有，和 MQ 訊息暫存一樣隨 SAVEPOINT 回復，transaction 結束時歸零，所以整批處理階段回復後的逐筆 fallback 不會被先前的計數拖累。
+  - **調整**：`fast_ddd_adapter.infrastructure.configure(..., max_event_chain_depth=10, max_events_per_unit_of_work=10_000)`，小於 1 時丟出 `ValueError`。
+  - **失敗**：`EventChainLimitExceededError` 不是 `DomainError`：HTTP 回 500 `server.internal_error`，MQ 依「其他例外」重新排隊、重試用完後送進 DLQ；批次 runner 的處理見上方批次 runner（整批階段不進入 fallback；最外層的逐筆階段只讓該筆失敗）。handler 不可以用 `except Exception` 吞掉巢狀呼叫的例外，否則也會吞掉上限。
+  - **升級影響**：上限對既有服務是新的限制，既有連鎖超過預設值時會開始失敗。同一個 unit of work 內以多次 `run_batch` 分段處理大量作業時（例如 MQ subscriber 對一位客戶的全部發票每 100 筆呼叫一次），事件總數會跨段累計，需要調高 `max_events_per_unit_of_work`，或改為每一段排入 TaskQueue，各自成為一個 unit of work。單一 HTTP 批次在整批處理階段的事件總數超過上限時，整個請求回 500，不會降級為逐筆處理（見上方批次 runner）。
+  - 扇出會鎖住大量資料列時（例如 100 筆各觸發 10 個目標），handler 改為在同一個交易中排入 TaskQueue 分段處理（第 11.1 節）。
 - 處理 `*Deleted` 事件的 handler 只能使用事件本身的資料：flush 之後 aggregate 已經不存在，載入不到。
 - **事件帶有來源 aggregate 的資訊**：`DomainEvent` 的基底欄位新增 `organization_id`、`aggregate_type`、`aggregate_id`，由 `AggregateRoot.add_event` 從 aggregate 複製過去。`save_many` 寫入 domain_event、adapter 組成 MQ 訊息時，都從事件讀取這些值，不需要再載入 aggregate，也不依賴 context。
 - **哪些事件要送到 MQ**：沿用原版的做法，由 adapter 的 event handler 決定。它訂閱需要對外發送的事件，組成第 7.4 節格式的訊息，放進 MQ 訊息暫存。core 不直接發送 MQ 訊息，所以 core 不定義 publisher 的 Protocol。
@@ -452,7 +465,7 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 - kernel 提供一個 SQL 語句計數器的測試工具（掛在 SQLAlchemy 的 `before_cursor_execute` 事件上）。
 - **測試用的 aggregate**：`example/` 只有 batch-void，而 batch-void 無法自然產生 IntegrityError、也沒有 batch-create。kernel 的測試套件另外定義一個只用於測試的 aggregate，具備 batch-create、batch-void 和一個 unique constraint，下面的往返次數和 fallback 測試都在 kernel 中以它執行；`example/` 的 batch-void 另外跑往返次數測試。
 - 批次 use case 的驗收條件：N=1 和 N=50 的往返次數相同（包括 batch-create）。前提是相關的 event handler 不做資料庫 I/O（或沒有 handler），或使用批次 handler；逐一處理的 handler 本來就會隨 N 增加 I/O。
-- 批次 handler 的測試：兩代連鎖的批次 handler 在 N=1 和 N=50 時往返次數相同；兩個事件修改同一個目標時只載入、儲存一次，version 遞增一次；新事件的 `parent_event_id` 指向各自的來源事件；不同組織的事件分成不同組；批次 handler 失敗時進入逐筆 fallback，結果和逐一處理相同；超過深度或事件總數上限時丟出例外。
+- 批次 handler 的測試（`kernel/tests/core/test_core.py`、`kernel/tests/adapter/test_batch_event_handlers.py`）：兩代連鎖的批次 handler 在 N=1 和 N=50 時往返次數相同（實測皆為 15 次；逐一處理的 handler 一代連鎖為 8 與 204 次）；兩個事件修改同一個目標時只有一次 `FOR UPDATE`、儲存一次，version 遞增一次；新事件的 `parent_event_id` 指向各自的來源事件；不同組織的事件分成不同組，handler 內的租戶過濾使用該組組織；批次 handler 失敗或目標不存在時進入逐筆 fallback，逐筆結果、資料列、事件因果和 MQ 訊息都和逐一處理相同；A→B→A 循環在第 11 代（或調整後的上限加一）丟出例外並整個 rollback，`run_batch` 在整批階段直接丟出、最外層的逐筆階段只讓該筆成為 `UnexpectedFailure` 而其他筆照常 commit、巢狀的逐筆階段直接丟出；事件總數 10,000 允許、10,001 丟出，調整後隨之改變，跨世代累計，SAVEPOINT 回復後不計入；`configure` 拒絕小於 1 的上限。
 - ORM 的 UPDATE 能不能合併成 executemany，取決於欄位集合是否一致。時間戳已改由應用程式設定（第 7.2 節），不需要回讀；Phase 1 仍要實測。如果無法合併，`save_many` 的 UPDATE 改用 ORM bulk UPDATE by primary key（`session.execute(update(Model), [...])`）。
 - `populate_existing` 的測試：同一個 transaction 中先不加鎖讀取、由另一個連線修改並 commit、再加鎖讀取，確認拿到的是新資料。
 - `SessionProvider` 的測試：巢狀 scope 丟出例外時外層 transaction 沒有被 rollback；`__aexit__` 收到例外時 rollback。
@@ -530,7 +543,7 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
   ```
 
   - 單筆的 `status`：batch-create 成功為 201、附 `data`；batch-delete 成功為 204、不附 `data`；其他操作成功為 200、附 `data`。失敗時附 `error`。
-  - 全部成功、全部失敗都回 207；只有和個別資料無關的錯誤才回對應的 4xx：Content-Type 不支援（415）、JSON 語法錯誤（400）、驗證失敗（含批次內重複 id、超過筆數上限，422）、某一筆 `etag` 不是單一 strong ETag（400）或為空字串（428）、未認證（401）、權限不足（403）、整批處理時鎖定逾時或 deadlock（409）。單筆的未預期錯誤（例如 event handler 失敗）在 207 中以 500 `server.internal_error` 表示。
+  - 全部成功、全部失敗都回 207（整批處理時超過事件連鎖上限除外，見第 8.2 節批次 runner）；只有和個別資料無關的錯誤才回對應的 4xx：Content-Type 不支援（415）、JSON 語法錯誤（400）、驗證失敗（含批次內重複 id、超過筆數上限，422）、某一筆 `etag` 不是單一 strong ETag（400）或為空字串（428）、未認證（401）、權限不足（403）、整批處理時鎖定逾時或 deadlock（409）。單筆的未預期錯誤（例如 event handler 失敗）在 207 中以 500 `server.internal_error` 表示。
   - 207 定義在 RFC 4918 §11.1（WebDAV），該 RFC 規定的 body 是 XML 的 `multistatus`；這裡的 JSON body 是 Zalando 採用的慣例，不是 RFC 4918 規定的格式。
 - 每個 response（包括 problem+json 和 207 的結果）都要在 OpenAPI 上宣告 model。
 
@@ -543,7 +556,7 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
 | 讀取、更新、domain 指令成功 | 200 OK | RFC 9110 §15.3.1 | — |
 | 建立成功 | 201 Created + `Location` | RFC 9110 §15.3.2 | — |
 | 刪除成功 | 204 No Content | RFC 9110 §15.3.5 | — |
-| 批次（不論成敗） | 207 Multi-Status | RFC 4918 §11.1、Zalando #152 | 逐筆附在 `results` |
+| 批次（不論逐筆成敗；例外見第 9.4 節） | 207 Multi-Status | RFC 4918 §11.1、Zalando #152 | 逐筆附在 `results` |
 | JSON 語法錯誤 | 400 Bad Request | RFC 9110 §15.5.1 | `request.malformed_json` |
 | `If-Match` 格式不接受（`*`、多個值、weak ETag） | 400 Bad Request | RFC 9110 §15.5.1 | `concurrency.invalid_if_match` |
 | 格式正確但內容驗證失敗（schema、批次超過筆數上限、批次內重複 id） | 422 Unprocessable Content | RFC 9110 §15.5.21；RFC 9457 的驗證錯誤範例也用 422 | `validation.failed`（逐欄錯誤見第 9.6 節；重複 id 時，最上層仍是 `validation.failed`，`errors[]` 中對應的那一筆為 `validation.duplicate_id`） |

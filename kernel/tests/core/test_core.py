@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -9,7 +9,7 @@ import pendulum
 import pytest
 
 from fast_ddd.aggregate import AggregateRoot, new_id
-from fast_ddd.batch import BatchItem, apply_batch, create_batch
+from fast_ddd.batch import BatchItem, apply_batch, apply_event_batch, create_batch
 from fast_ddd.context import (
     ContextNotSetError,
     User,
@@ -45,6 +45,16 @@ class InvoiceVoided(DomainEvent):
     reason: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class InvoiceVoidedByAdmin(InvoiceVoided):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class InvoiceNoted(DomainEvent):
+    text: str
+
+
 @dataclass
 class InvoiceAlreadyVoided(DomainError):
     code: ClassVar[str] = "billing.invoice.already_voided"
@@ -62,6 +72,7 @@ class Invoice(AggregateRoot):
         super().__init__(id=id, organization_id=organization_id, version=version)
         self.status = Status.ACTIVE
         self.voided_at: pendulum.DateTime | None = None
+        self.notes: list[str] = []
 
     def void(self, reason: str) -> None:
         if self.voided_at is not None:
@@ -70,15 +81,21 @@ class Invoice(AggregateRoot):
         self.voided_at = pendulum.now("UTC")
         self.add_event(InvoiceVoided(doer=current_user(), reason=reason))
 
+    def note(self, text: str) -> None:
+        self.notes.append(text)
+        self.add_event(InvoiceNoted(doer=current_user(), text=text))
+
 
 class FakeRepository:
     def __init__(self, *aggregates: Invoice) -> None:
         self.rows = {a.id: a for a in aggregates}
         self.saved: list[Invoice] = []
         self.loaded_with_lock: bool | None = None
+        self.load_calls: list[list[UUID]] = []
 
     async def load_many(self, ids: Sequence[UUID], *, lock: bool) -> dict[UUID, Invoice]:
         self.loaded_with_lock = lock
+        self.load_calls.append(list(ids))
         return {i: self.rows[i] for i in ids if i in self.rows}
 
     async def save_many(self, aggregates: Sequence[Invoice]) -> None:
@@ -135,6 +152,140 @@ async def test_event_bus_sets_parent_event_and_event_organization() -> None:
         assert current_parent_event_id() is None
 
     assert seen == [(event.event_id, other_org, False)]
+
+
+type BatchCall = tuple[str, list[UUID], UUID | None, UUID | None, bool]
+
+
+async def test_event_bus_runs_batch_handlers_per_type_and_organization_after_singles() -> None:
+    bus = EventBus()
+    calls: list[BatchCall] = []
+
+    def record(name: str) -> Callable[[Sequence[DomainEvent]], Awaitable[None]]:
+        async def handle(events: Sequence[DomainEvent]) -> None:
+            calls.append(
+                (
+                    name,
+                    [e.event_id for e in events],
+                    current_organization_id(),
+                    current_parent_event_id(),
+                    is_tenant_exempt(),
+                )
+            )
+
+        return handle
+
+    async def single(event: InvoiceVoided) -> None:
+        await record("single")([event])
+
+    org_a, org_b = uuid4(), uuid4()
+    with unit_of_work_context(user=DOER, organization_id=None):
+        a1 = InvoiceVoided(doer=DOER, reason="a1", organization_id=org_a)
+        b1 = InvoiceVoided(doer=DOER, reason="b1", organization_id=org_b)
+        noted = InvoiceNoted(doer=DOER, text="n", organization_id=org_a)
+        a2 = InvoiceVoided(doer=DOER, reason="a2", organization_id=org_a)
+        admin = InvoiceVoidedByAdmin(doer=DOER, reason="s", organization_id=org_a)
+        orgless = InvoiceVoided(doer=DOER, reason="g", organization_id=None)
+        events = [a1, b1, noted, a2, admin, orgless]
+        bus.subscribe(InvoiceVoided, single)
+        bus.subscribe_batch(InvoiceVoided, record("voided-1"))
+        bus.subscribe_batch(InvoiceVoided, record("voided-2"))
+        bus.subscribe_batch(InvoiceNoted, record("noted"))
+        bus.subscribe_batch(InvoiceVoidedByAdmin, record("admin"))
+
+        def generate() -> Iterator[DomainEvent]:
+            yield from events
+
+        with tenant_exemption():
+            await bus.dispatch(generate())
+
+    def one(name: str, event: DomainEvent) -> BatchCall:
+        return (name, [event.event_id], event.organization_id, event.event_id, False)
+
+    pair = [a1.event_id, a2.event_id]
+    assert calls == [
+        one("single", a1),
+        one("single", b1),
+        one("single", a2),
+        one("single", orgless),
+        ("voided-1", pair, org_a, None, False),
+        ("voided-2", pair, org_a, None, False),
+        one("voided-1", b1),
+        one("voided-2", b1),
+        one("noted", noted),
+        one("admin", admin),
+        one("voided-1", orgless),
+        one("voided-2", orgless),
+    ]
+
+
+async def test_event_bus_dispatches_nothing_for_no_events() -> None:
+    bus = EventBus()
+    called: list[object] = []
+
+    async def handle(events: list[InvoiceVoided]) -> None:
+        called.append(events)
+
+    bus.subscribe_batch(InvoiceVoided, handle)
+    await bus.dispatch([])
+    assert called == []
+
+
+async def test_apply_event_batch_loads_each_target_once_and_scopes_each_event() -> None:
+    with unit_of_work_context(user=DOER, organization_id=ORG):
+        first = Invoice(id=new_id(), organization_id=ORG, version=1)
+        second = Invoice(id=new_id(), organization_id=ORG, version=1)
+        repo = FakeRepository(first, second)
+        sources = [InvoiceVoided(doer=DOER, reason=reason, organization_id=ORG) for reason in "abc"]
+        targets = {
+            sources[0].event_id: first.id,
+            sources[1].event_id: second.id,
+            sources[2].event_id: first.id,
+        }
+
+        saved = await apply_event_batch(repo, Invoice, sources, target_of(targets), apply_note)
+        assert current_parent_event_id() is None
+
+    assert repo.load_calls == [[first.id, second.id]]
+    assert repo.loaded_with_lock is True
+    assert repo.saved == saved == [first, second]
+    assert first.notes == ["a", "c"]
+    assert second.notes == ["b"]
+    assert [e.parent_event_id for e in first.domain_events] == [
+        sources[0].event_id,
+        sources[2].event_id,
+    ]
+    assert [e.parent_event_id for e in second.domain_events] == [sources[1].event_id]
+
+
+def apply_note(invoice: Invoice, event: InvoiceVoided) -> None:
+    invoice.note(event.reason)
+
+
+def target_of(targets: dict[UUID, UUID]) -> Callable[[DomainEvent], UUID]:
+    return lambda event: targets[event.event_id]
+
+
+async def test_apply_event_batch_fails_whole_when_a_target_is_missing() -> None:
+    with unit_of_work_context(user=DOER, organization_id=ORG):
+        present = Invoice(id=new_id(), organization_id=ORG, version=1)
+        missing = new_id()
+        repo = FakeRepository(present)
+        sources = [InvoiceVoided(doer=DOER, reason=r, organization_id=ORG) for r in "ab"]
+        targets = {sources[0].event_id: present.id, sources[1].event_id: missing}
+
+        with pytest.raises(AggregateNotFound) as raised:
+            await apply_event_batch(repo, Invoice, sources, target_of(targets), apply_note)
+
+        nothing: list[InvoiceVoided] = []
+        assert await apply_event_batch(repo, Invoice, nothing, target_of(targets), apply_note) == []
+
+    assert raised.value.aggregate_id == missing
+    assert raised.value.aggregate_type == "invoice"
+    assert repo.load_calls == [[present.id, missing]]
+    assert repo.saved == []
+    assert present.notes == []
+    assert present.domain_events == ()
 
 
 def test_domain_error_params_detail_and_registry() -> None:

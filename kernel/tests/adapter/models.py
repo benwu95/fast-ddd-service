@@ -44,6 +44,12 @@ class OrderVoided(DomainEvent):
     reason: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class OrderLineAdded(DomainEvent):
+    line_id: UUID
+    qty: int
+
+
 @dataclass
 class OrderAlreadyVoided(DomainError):
     code: ClassVar[str] = "kernel_test.order.already_voided"
@@ -90,6 +96,10 @@ class Order(AggregateRoot):
             raise OrderAlreadyVoided(order_id=self.id)
         self.status = Status.VOIDED
         self.add_event(OrderVoided(doer=current_user(), reason=reason))
+
+    def add_line(self, line_id: UUID, qty: int) -> None:
+        self.lines = [*self.lines, Line(line_id, qty)]
+        self.add_event(OrderLineAdded(doer=current_user(), line_id=line_id, qty=qty))
 
     def change_line(self, line_id: UUID, qty: int) -> None:
         self.lines = [

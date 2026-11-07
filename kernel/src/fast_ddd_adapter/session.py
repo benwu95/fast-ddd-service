@@ -30,6 +30,7 @@ class Mark:
     after_commit: int
     saved: int
     pending_events: int
+    dispatched: int
 
 
 class SessionProvider:
@@ -52,6 +53,8 @@ class SessionProvider:
         self._pending_events: list[DomainEvent] = []
         self._protected: set[Hashable] = set()
         self._loaded: dict[Hashable, object] = {}
+        self._dispatched = 0
+        self._dispatch_depth = 0
 
     @property
     def session(self) -> AsyncSession:
@@ -66,6 +69,16 @@ class SessionProvider:
     @property
     def is_active(self) -> bool:
         return self._depth > 0
+
+    @property
+    def dispatched_events(self) -> int:
+        """Events handed to the event bus in this unit of work, minus rolled-back ones."""
+        return self._dispatched
+
+    @property
+    def dispatch_depth(self) -> int:
+        """How many event dispatches are currently running inside each other."""
+        return self._dispatch_depth
 
     async def __aenter__(self) -> Self:
         if self._depth == 0:
@@ -96,7 +109,7 @@ class SessionProvider:
                 except BaseException:
                     logger.exception("transaction rollback failed")
                 finally:
-                    self._restore(Mark(0, 0, 0))
+                    self._restore(Mark(0, 0, 0, 0))
             kind = "after-commit" if failure is None else "on-rollback"
             hooks = list(self._after_commit if failure is None else self._on_rollback)
         finally:
@@ -119,7 +132,9 @@ class SessionProvider:
             raise failure
 
     def mark(self) -> Mark:
-        return Mark(len(self._after_commit), len(self._saved), len(self._pending_events))
+        return Mark(
+            len(self._after_commit), len(self._saved), len(self._pending_events), self._dispatched
+        )
 
     def _restore(self, mark: Mark) -> None:
         for aggregate, version, updated_at, events in reversed(self._persistence[mark.saved :]):
@@ -130,6 +145,7 @@ class SessionProvider:
         del self._after_commit[mark.after_commit :]
         del self._saved[mark.saved :]
         del self._pending_events[mark.pending_events :]
+        self._dispatched = mark.dispatched
         self._loaded.clear()
 
     @asynccontextmanager
@@ -183,6 +199,15 @@ class SessionProvider:
         return events
 
     @contextmanager
+    def dispatching(self, count: int) -> Generator[None]:
+        self._dispatched += count
+        self._dispatch_depth += 1
+        try:
+            yield
+        finally:
+            self._dispatch_depth -= 1
+
+    @contextmanager
     def protect(self, keys: list[Hashable]) -> Generator[None]:
         added = [key for key in keys if key not in self._protected]
         self._protected.update(added)
@@ -207,6 +232,8 @@ class SessionProvider:
         self._pending_events.clear()
         self._protected.clear()
         self._loaded.clear()
+        self._dispatched = 0
+        self._dispatch_depth = 0
 
 
 _current: ContextVar[SessionProvider | None] = ContextVar("fast_ddd_session_provider", default=None)

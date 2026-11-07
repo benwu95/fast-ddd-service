@@ -31,7 +31,7 @@ One router per aggregate, `APIRouter(prefix="/<aggregates>")`, registered in `wi
 | Status | When | Error code |
 |---|---|---|
 | 200 / 201 / 204 | read, update or command / create / delete succeeded | — |
-| 207 | any batch, whatever the item outcomes | per item in `results` |
+| 207 | any batch that reaches its results, whatever the item outcomes | per item in `results` |
 | 400 | malformed JSON; `If-Match` or a batch item `etag` is `*`, several values or a weak ETag | `request.malformed_json`, `concurrency.invalid_if_match` |
 | 401 | missing, invalid or expired token | `auth.unauthenticated`, `auth.token_invalid`, `auth.token_expired` |
 | 403 | authenticated without the permission | `auth.permission_denied` |
@@ -48,7 +48,7 @@ One router per aggregate, `APIRouter(prefix="/<aggregates>")`, registered in `wi
 - The domain knows no HTTP. `fast_ddd_port` maps `ErrorKind` to status: `INVALID` 422, `CONFLICT` 409, `NOT_FOUND` 404, `ALREADY_EXISTS` 409, `PRECONDITION_FAILED` 412.
 - Checks run in this order: 415 (middleware, before authentication), 401 (middleware), 404 or 405 (routing), 400 (malformed JSON), 403 (`require()`), 428 or 400 (`If-Match`), 422 (schema), 404 (load), 412 (version), 409 or 422 (domain method). A 404 therefore wins over 412.
 - DELETE of a missing resource is 404. A repeated create with a client-supplied id is 409 `already_exists`.
-- Batch: 207 even when every item fails. Item status is 201 for batch-create (pass `success_status=201` to `batch_response()`), 204 for batch-delete (`success_status=204`) and 200 otherwise, or the item's error (500 `server.internal_error` for an unexpected failure such as a failed event handler). Only errors that concern the whole request return a 4xx: 415, malformed JSON (400), validation including duplicate ids and over the item limit (422), an item `etag` that is not a single strong ETag (400) or is empty (428), 401, 403, and a lock conflict while processing the whole batch (409).
+- Batch: 207 even when every item fails. Item status is 201 for batch-create (pass `success_status=201` to `batch_response()`), 204 for batch-delete (`success_status=204`) and 200 otherwise, or the item's error (500 `server.internal_error` for an unexpected failure such as a failed event handler). Only errors that concern the whole request return a 4xx: 415, malformed JSON (400), validation including duplicate ids and over the item limit (422), an item `etag` that is not a single strong ETag (400) or is empty (428), 401, 403, and a lock conflict while processing the whole batch (409). An event chain past the kernel's limits (`EventChainLimitExceededError`) while processing the whole batch fails the whole request with 500 `server.internal_error`; in the item-by-item fallback it is that item's 500.
 - 413 and 429 come from the reverse proxy or gateway, not the service.
 
 ## Error codes

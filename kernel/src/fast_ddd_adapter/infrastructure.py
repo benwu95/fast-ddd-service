@@ -41,6 +41,8 @@ class KernelInfrastructure:
     event_bus: EventBus
     publisher: Publisher | None = None
     task_queue: TaskQueue | None = None
+    max_event_chain_depth: int = 10
+    max_events_per_unit_of_work: int = 10_000
 
 
 _infrastructure: KernelInfrastructure | None = None
@@ -52,14 +54,30 @@ def configure(
     event_bus: EventBus,
     publisher: Publisher | None = None,
     task_queue: TaskQueue | None = None,
+    max_event_chain_depth: int = 10,
+    max_events_per_unit_of_work: int = 10_000,
 ) -> None:
+    """Install the process-wide infrastructure.
+
+    The two limits bound one unit of work: generations of nested event dispatch (the
+    command's own events are the first) and the total number of dispatched events.
+    """
     global _infrastructure
+    _require_positive_int("max_event_chain_depth", max_event_chain_depth)
+    _require_positive_int("max_events_per_unit_of_work", max_events_per_unit_of_work)
     _infrastructure = KernelInfrastructure(
         session_factory=session_factory,
         event_bus=event_bus,
         publisher=publisher,
         task_queue=task_queue,
+        max_event_chain_depth=max_event_chain_depth,
+        max_events_per_unit_of_work=max_events_per_unit_of_work,
     )
+
+
+def _require_positive_int(name: str, value: int) -> None:
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1, got {value!r}")
 
 
 def infrastructure() -> KernelInfrastructure:

@@ -21,4 +21,6 @@
 | 背景工作 | task / PgQueuer | 與業務資料同交易 enqueue 的工作；worker wrapper 提供 context、retry 與失敗保留。 |
 | 定期排程 | cron / schedule | Registry 註冊的 PgQueuer 排程；以 system identity、無 organization 執行 handler。 |
 | 批次降級 | batch fallback | 整批非預期失敗後逐項執行；非 HTTP 呼叫可要求 transient failure 重試整個 UoW。 |
+| 批次 handler | batch event handler | `subscribe_batch` 註冊、每次分派依事件類型與 organization 分組收到 list 的 handler；全有或全無。 |
+| 事件連鎖上限 | event chain limit | 同一 UoW 的分派世代（預設 10）與事件總數（預設 10,000）上限，由 `configure` 調整。 |
 | wire contract | JSON 契約 | 跨程序固定欄位名稱、值格式與 schema；任意業務 map key 不參與名稱轉換。 |

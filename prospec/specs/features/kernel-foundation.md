@@ -1,9 +1,9 @@
 ---
 feature: kernel-foundation
 status: active
-last_updated: 2026-10-17
-story_count: 1
-req_count: 3
+last_updated: 2026-11-07
+story_count: 2
+req_count: 6
 ---
 
 # kernel-foundation
@@ -62,15 +62,57 @@ Python 開發者以 snake_case 的具型別 domain／訊息資料工作；API／
 
 ---
 
+### US-2: 批次處理事件連鎖並限制其規模 [P0]
+
+作為維護服務 event handler 的 Python 開發者，
+我要以批次 handler 與 `apply_event_batch` 用集合 I/O 處理連鎖事件，並讓 kernel 限制連鎖的深度與總數，
+以便大批次的往返次數不隨筆數成長，失敗時仍保有逐筆語意，循環或失控扇出在明確的上限失敗。
+
+**Acceptance Scenarios:**
+- WHEN 兩代連鎖都使用批次 handler，THEN N=1 與 N=50 的 SQL 往返次數相同，同一目標只載入與儲存一次，新事件的來源指向各自的事件。
+- WHEN 批次 handler 因連鎖上限以外的原因失敗，THEN 最近一層正在整批階段的批次 runner 退回逐筆處理；每筆命令只產生一個該類型事件時，結果與逐一處理的 handler 相同。
+- WHEN 事件連鎖超過世代深度或事件總數上限，THEN 丟出例外，上限可由 `configure(...)` 調整。
+
+#### REQ-KERNEL-015: 依事件類型與組織分組的批次 event handler
+批次 handler 依事件的確切類型與組織分組，每組呼叫一次，讓連鎖事件的 I/O 以集合處理。
+- WHEN 以 `subscribe_batch` 訂閱的事件被分派，THEN 依（事件類型, `organization_id`）分組，每組呼叫一次，組內保留事件順序，handler 在該組組織的租戶 context 中執行。
+- WHEN 同一次分派同時有逐一處理與批次 handler，THEN 先依事件順序執行逐一處理的 handler，再依各組第一個事件出現的順序執行批次 handler。
+- WHEN 組內只有一個事件，THEN handler 執行時的來源事件為該事件；WHEN 組內有多個事件，THEN 不設定來源事件。
+- WHEN 兩代連鎖都使用批次 handler，THEN N=1 與 N=50 的 SQL 往返次數相同。
+
+---
+
+#### REQ-KERNEL-016: 依事件套用 domain 方法並全有或全無
+`apply_event_batch` 以集合 I/O 套用多個事件，因果逐事件保留，失敗時整批不生效。
+- WHEN 多個事件指向同一個目標，THEN 目標只載入、儲存一次，version 只遞增一次，每個事件的效果都套用。
+- WHEN domain 方法在 `apply_event_batch` 中產生新事件，THEN 新事件的 `parent_event_id` 為觸發它的來源事件。
+- WHEN 任一目標不存在，THEN 丟出 `AggregateNotFound`，不儲存任何目標。
+- WHEN 批次 handler 在 `run_batch` 整批階段因連鎖上限以外的原因失敗，THEN 整批回復並逐筆 fallback；每筆命令只產生一個該類型事件時，結果與逐一處理 handler 相同。
+
+---
+
+#### REQ-KERNEL-017: 同一 unit of work 的事件連鎖上限
+事件連鎖的世代深度與事件總數各有可設定的上限，超過時整個 unit of work 失敗。
+- WHEN 事件分派的世代超過 `max_event_chain_depth`（預設 10，最外層命令的事件為第 1 代），THEN 丟出 `EventChainLimitExceededError`。
+- WHEN 同一 unit of work 分派的事件總數超過 `max_events_per_unit_of_work`（預設 10,000），THEN 丟出 `EventChainLimitExceededError`；剛好等於上限時允許。
+- WHEN SAVEPOINT 或 transaction 回復，THEN 回復範圍內分派過的事件不計入總數。
+- WHEN `run_batch` 在整批階段遇到 `EventChainLimitExceededError`，THEN 直接往上丟出，不進入逐筆 fallback。
+- WHEN 最外層 `run_batch` 的逐筆 fallback 中某一筆超限，THEN 只有該筆結果為 `UnexpectedFailure`，其他筆照常 commit；WHEN `run_batch` 巢狀在另一個 unit of work 中，THEN 逐筆階段的超限往上丟出。
+- WHEN `configure(...)` 收到小於 1 的上限，THEN 丟出 `ValueError`，既有設定不變。
+
+---
+
 ## Edge Cases
 
 - 缺少 organization context 必須明確失敗；跨組織操作透過明確豁免保留原始組織歸屬。
 - 批次 fallback 與外層 rollback 同時回復事件、持久化 metadata 與待發訊息。
+- 沒有事件的分派不算一代；事件總數計入沒有訂閱者的事件，並在同一 unit of work 的多次批次之間累計。
 
 ## Success Criteria
 
 - **SC-1**: 具名 ID 的正反 typing contract 與跨邊界序列化案例均可執行。
 - **SC-2**: handler 不做 DB I/O 時，N=1／50 的正常批次 SQL 往返差值為 0。
+- **SC-3**: 兩代批次 handler 連鎖在 N=1／50 的 SQL 往返差值為 0。
 
 ## Maintenance Rules
 
@@ -87,4 +129,5 @@ Python 開發者以 snake_case 的具型別 domain／訊息資料工作；API／
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-11-07 | add-batch-event-handlers | ADDED REQ-KERNEL-015; ADDED REQ-KERNEL-016; ADDED REQ-KERNEL-017 | REQ-KERNEL-015, REQ-KERNEL-016, REQ-KERNEL-017 |
 | 2026-10-17 | replan-phase-one | 建立已驗收能力基準 | US-1, REQ-KERNEL-001, REQ-KERNEL-002, REQ-KERNEL-003 |

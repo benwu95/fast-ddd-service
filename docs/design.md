@@ -88,7 +88,7 @@ fast-ddd-service/
 | 測試 | pytest、testcontainers | — |
 | 可觀測性 | OpenTelemetry（tracing 和 metrics） | SDK 1.45.x |
 | Git hook | pre-commit、conventional-pre-commit | 4.7.x、4.4.x |
-| 即時推播（recipe） | python-socketio（RabbitMQ manager 需要 aio-pika） | 5.17.x |
+| 即時推播（kernel extra `realtime`） | python-socketio（RabbitMQ backend 由 kernel 以 aio-pika 實作，第 14.3 節） | 5.18.x（2026-11-07 查證） |
 
 Python 最低版本訂為 3.13，與原 repo 的 `pyproject.toml` 一致。PEP 695 泛型語法（原 repo 已經使用 `type` 語句）也需要 ≥ 3.12。
 
@@ -172,7 +172,7 @@ Phase 3 另以 optional extra `fast-ddd-kernel[realtime]` 加入即時推播的 
 kernel 端（根設定同樣要有 `include_external_packages = True`；實測不設定時，禁止外部套件的 forbidden contract 會直接報錯）：
 
 - `layers`：`fast_ddd_port` > `fast_ddd_adapter` > `fast_ddd`。
-- `forbidden`：`fast_ddd` 不得 import `pydantic`、`sqlalchemy`、`fastapi`、`faststream`。
+- `forbidden`：`fast_ddd` 不得 import `pydantic`、`sqlalchemy`、`fastapi`、`faststream`、`socketio`。
 - `forbidden`：`fast_ddd_adapter` 不得 import `fastapi`、`pydantic`（`layers` 只擋 `fast_ddd_port`，擋不到直接 import 外部套件；已實測）。
 - `forbidden`：`fast_ddd`、`fast_ddd_adapter`、`fast_ddd_port` 不得 import `fast_ddd_devtools`。
 
@@ -995,16 +995,16 @@ DRF 預設只有 CRUD，因為它以資料為中心。DDD 的核心是 domain �
 
 需要把變更即時推給前端時才加入。recipe 必須遵守以下規則：
 
-- **kernel 提供的部分**（Phase 3 實作）：以 optional extra `fast-ddd-kernel[realtime]` 提供，python-socketio 和 aio-pika 只安裝在採用 recipe 的服務。內容包括 adapter 層的推播 publisher（註冊為 after-commit hook，拒絕沒有 room 的推播）、port 層的連線認證（沿用 `JwtVerifier`，連線時自動加入 org／user room）與加入資源 room 前的權限檢查，以及掛載 ASGI app 的 helper。kernel 的 import-linter 加上 `fast_ddd` 不得 import `socketio`。recipe 只說明服務端的接線與 room 設計。
-- **技術**：Socket.IO（python-socketio），以 ASGI app 掛在 API 同一個 FastAPI app 的固定路徑下（例如 `/realtime`），不另開 process。多個 API 實例之間的推播分送使用 python-socketio 的 RabbitMQ manager（`AsyncAioPikaManager`），沿用既有的 RabbitMQ，不另外引入 Redis。
+- **kernel 提供的部分**（Phase 3 實作）：以 optional extra `fast-ddd-kernel[realtime]` 提供，python-socketio 只安裝在採用 recipe 的服務（aio-pika 已隨 FastStream 的 RabbitMQ 相依安裝，extra 仍明列以宣告直接使用）。adapter 層的 `fast_ddd_adapter.realtime` 提供 room 命名、`push_after_commit()`（註冊為 after-commit hook）與 `create_realtime_emitter()`／`configure_realtime()`；port 層的 `fast_ddd_port.realtime.mount_realtime()` 負責連線認證（沿用 `JwtVerifier`，連線時自動加入 org／user room）、加入資源 room 前的權限檢查（與 `require()` 共用 `ensure_permission()`）與 ASGI 掛載，回傳的 `RealtimeServer` 和 emitter 都須在服務關閉時呼叫 `close()`。`close()` 可重複呼叫，之後新的連線一律拒絕。兩個模組都不由套件 `__init__` import，未安裝 extra 時 import 會提示安裝。kernel 的 import-linter 加上 `fast_ddd` 不得 import `socketio`。recipe 只說明服務端的接線與 room 設計。
+- **技術**：Socket.IO（python-socketio），以 ASGI app 掛在 API 同一個 FastAPI app 的固定路徑下（例如 `/realtime`），不另開 process。多個 API 實例之間的推播分送沿用既有的 RabbitMQ（fanout exchange，每個實例一個 exclusive queue），不另外引入 Redis。exchange 依服務名稱命名（`fast_ddd.realtime.{service}`，`mount_realtime` 與 `create_realtime_emitter` 必填 `service`），共用 broker 的不同服務不會收到彼此的推播；room 名稱本身不含服務識別。kernel 依 python-socketio `AsyncPubSubManager` 的擴充點自行實作 `KernelAioPikaManager`，不使用上游的 `AsyncAioPikaManager`：它宣告的 transient 非 exclusive queue 會被 RabbitMQ 4 拒絕（`transient_nonexcl_queues`），連線中途逾時後 publisher 永久失效，也沒有關閉方法（2026-11-07 以 python-socketio 5.18.1、RabbitMQ 4.3.6 實測）。API、consumer、worker 都經同一種 write-only emitter 推播；publish 失敗時重建連線重試一次，仍失敗只寫 log（與第 11 節 commit 後發送的取捨相同）；連線一律先建立 `RobustConnection` 物件再 `connect()`，逾時或取消時關閉它，否則 aio-pika 會在背景每 5 秒重連且無人持有。
 - **分層**：socket 的事件 handler 屬於 port 層（和 HTTP router 同層），一樣透過 controller 呼叫 use case。推播由 adapter 層的 publisher 發出，core 不知道推播的存在；要推播什麼，由 adapter 的 event handler 依 domain event 決定（和 MQ 訊息相同的做法，第 8.2 節）。
 - **commit 之後才推播**：推播一律註冊為 `SessionProvider` 的 after-commit hook（第 8.2 節），rollback 時不會送出。
-- **認證**：連線時必須驗證 JWT（和 HTTP 使用同一套驗證，第 10.3 節），沒有 token 或驗證失敗一律拒絕連線，不建立連線後再送錯誤事件。
+- **認證**：連線時必須驗證 JWT（和 HTTP 使用同一套驗證，第 10.3 節），沒有 token 或驗證失敗一律拒絕連線，不建立連線後再送錯誤事件。token 只取自 Socket.IO 連線的 `auth`（`{"token": …}`），不讀 query string，避免 token 留在 access log；拒絕時 client 的 `connect_error` 以 `message` 帶錯誤代碼、`data` 帶 problem+json，kernel 隨即結束該連線的 Engine.IO session（python-socketio 預設會保留它，client 只要回 ping 就能一直佔著）；python-socketio 也沒有 connect timeout，kernel 比照 Socket.IO 官方 server 的 45 秒預設，結束在期限內沒有已認證連線（或離開 namespace 後未重連）的 transport。只在連線與加入 room 時檢查：連線期間 token 過期或權限被撤銷，不會中斷連線或移出 room。
 - **tenant**：組織和使用者一律取自 token，不接受 client 在 query string 或事件內容中自行指定。
-- **room**：`org:{organization_id}`、`user:{user_id}`，以及依資源而定的 room（例如 `your_aggregate:{id}`）。連線時自動加入自己的 org 和 user room；加入資源 room 前，必須先檢查權限（和 HTTP 相同的 `require()` 規則）。依使用者的 room 推播，重新連線後不需要重新訂閱也能收到。
-- **不允許沒有對象的推播**：kernel 的 publisher 拒絕沒有指定 room 的推播，避免誤推給所有連線。
-- **訊息格式**：推播內容和 HTTP 回應使用相同的 `ResponseModel`（camelCase、RFC 3339），並帶 `eventName` 和 `eventVersion`；需要回應的事件，ack 使用固定格式 `{"status": "ok" | "error", "data": …, "error": <problem+json>}`。
-- **部署**：只允許 WebSocket transport（不使用 long-polling 備援），多實例時不需要 sticky session。
+- **room**：`org:{organization_id}`、`user:{user_id}`，以及依資源而定的 room。資源 room 一律由 kernel 以組織為前綴展開成 `org:{organization_id}:{resource}:{id}`（加入時組織取自 token、推播時取自 unit of work），client 只送資源名稱與 UUID；因此權限只需和 HTTP 相同的 `require()` 規則，持有同名權限的其他組織使用者也收不到。服務以「資源名稱（小寫 snake_case）→ 權限」登記可加入的資源，未登記的資源一律拒絕；每個連線最多加入 `max_resource_rooms`（預設 100）個資源 room，超過時回 `rate_limit.exceeded`，避免單一連線讓 room 表無界成長。連線時自動加入自己的 org 和 user room；token 沒有組織時只加入 user room，也不能加入資源 room。依使用者的 room 推播，重新連線後不需要重新訂閱也能收到；資源 room 在重新連線後需重新加入。
+- **不允許沒有對象的推播**：kernel 的 publisher 拒絕沒有指定 room 的推播，避免誤推給所有連線（python-socketio 把空的 room 清單視為廣播）。`push_after_commit()` 在登記當下就拋 `RealtimePushError`：沒有 room、需要組織的 room 卻沒有組織、或 `data` 不是 JSON（含 NaN），因此錯誤落在交易內，不會在 commit 後才遺失。
+- **訊息格式**：推播的固定欄位為 `eventName`、`eventVersion`、`data`。`data` 由服務序列化後原樣送出（登記時取快照）；adapter 不能 import Pydantic，因此以 `to_json(..., camel_case=True)` 產生和 HTTP 回應的 `ResponseModel` 相同的 wire 形狀（camelCase、RFC 3339）。需要回應的事件，ack 使用固定格式 `{"status": "ok" | "error", "data": …, "error": <problem+json>}`。
+- **部署**：只允許 WebSocket transport（不使用 long-polling 備援），多實例時不需要 sticky session。`cors_allowed_origins` 預設只允許同源；engineio 以 `X-Forwarded-Proto` 判斷 scheme（否則視為 http），TLS 由 proxy 終止時須送這個 header，前端在其他網域時須明列允許的來源。
 - **測試**：用真正的 Socket.IO client 連線測試認證拒絕、room 權限、commit 前不推播、rollback 不推播。
 
 ## 15. 實作階段

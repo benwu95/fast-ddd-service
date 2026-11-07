@@ -21,17 +21,27 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.1.5,<2.2",
 ]
 
+[project.optional-dependencies]
+realtime = [
+    "aio-pika>=10.1,<11",
+    "python-socketio>=5.18,<5.19",
+]
+
 [dependency-groups]
 dev = [
     "asyncpg-stubs>=0.32,<0.33",
     "coverage>=7.10",
+    "fast-ddd-kernel[realtime]",
     "import-linter>=2.15",
     "pre-commit>=4.7",
     "pyright==1.1.414",
     "pytest>=8.4",
     "pytest-asyncio>=1.2",
+    "python-socketio[asyncio-client]>=5.18,<5.19",
     "ruff>=0.14",
     "testcontainers[postgres,rabbitmq]>=4.13",
+    "uvicorn>=0.54",
+    "wsproto>=1.2",
 ]
 
 [build-system]
@@ -107,7 +117,7 @@ layers = ["fast_ddd_port", "fast_ddd_adapter", "fast_ddd"]
 name = "Core has no framework dependencies"
 type = "forbidden"
 source_modules = ["fast_ddd"]
-forbidden_modules = ["pydantic", "sqlalchemy", "fastapi", "faststream", "pgqueuer", "asyncpg", "starlette"]
+forbidden_modules = ["pydantic", "sqlalchemy", "fastapi", "faststream", "pgqueuer", "asyncpg", "starlette", "socketio"]
 
 [[tool.importlinter.contracts]]
 name = "Adapter does not depend on HTTP or validation frameworks"

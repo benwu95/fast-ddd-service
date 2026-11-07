@@ -9,6 +9,8 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from fast_ddd.context import User
 from fast_ddd_adapter.infrastructure import create_engine, create_session_factory
@@ -17,6 +19,7 @@ from fast_ddd_adapter.orm import Base
 from tests import telemetry as test_telemetry
 
 POSTGRES_IMAGE = "postgres:18"
+RABBITMQ_IMAGE = "rabbitmq:4-management"
 
 
 def alembic_config(database_url: str) -> Config:
@@ -37,6 +40,24 @@ def telemetry() -> test_telemetry.Telemetry:
 def postgres() -> Generator[PostgresContainer]:
     with PostgresContainer(POSTGRES_IMAGE, driver="asyncpg") as container:
         yield container
+
+
+@pytest.fixture(scope="session")
+def rabbitmq() -> Generator[DockerContainer]:
+    container = (
+        DockerContainer(RABBITMQ_IMAGE)
+        .with_exposed_ports(5672)
+        .waiting_for(LogMessageWaitStrategy("Server startup complete"))
+    )
+    with container:
+        yield container
+
+
+@pytest.fixture(scope="session")
+def amqp_url(rabbitmq: DockerContainer) -> str:
+    host = rabbitmq.get_container_host_ip()
+    port = rabbitmq.get_exposed_port(5672)
+    return f"amqp://guest:guest@{host}:{port}/"
 
 
 @pytest.fixture(scope="session")

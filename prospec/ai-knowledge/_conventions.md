@@ -16,7 +16,7 @@ workspace 使用 uv；`uv run --frozen` 依 `uv.lock` 執行。Python 版本至�
 
 分層為 port → adapter → core；core 不依賴 Pydantic、ORM 或入口框架。服務由 bootstrap／wiring 組裝；entry points 讀 settings，port 透過 controller 進入 use case。Repository 明訂 `tenant_scope`，自訂查詢沿用 `tenant_conditions()`。
 
-`execute()` 協調交易與事件；`SessionProvider` 擁有外層 commit，巢狀 command 使用 SAVEPOINT。rollback journal 還原持久化 metadata 與原 events，清除載入快取；business state 由 domain 保留。交易關閉並清除 provider state 後才執行 hook snapshots，允許 hook 開新交易。背景 task 同交易 enqueue；MQ 放 after-commit hook。跨組織查詢使用有 reason 的 `system_context()`；讀寫皆驗 tenant。
+`execute()` 協調交易與事件；`SessionProvider` 擁有外層 commit，巢狀 command 使用 SAVEPOINT。rollback journal 還原持久化 metadata 與原 events，清除載入快取；business state 由 domain 保留。交易關閉並清除 provider state 後才執行 hook snapshots，允許 hook 開新交易。背景 task 同交易 enqueue；MQ 與即時推播放 after-commit hook，推播必須指定 room，資源 room 由 kernel 以組織為前綴。跨組織查詢使用有 reason 的 `system_context()`；讀寫皆驗 tenant。
 
 value object 使用 frozen dataclass，金額使用 Decimal；現在時間使用 `pendulum.now('UTC')`。PATCH 用 MISSING → UNSET 區分未提供與 null。
 

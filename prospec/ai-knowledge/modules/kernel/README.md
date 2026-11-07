@@ -18,9 +18,10 @@
 - `AggregateRoot`、`DomainEvent` — domain 狀態與事件。
 - `execute()`、`RepositoryBase` — command 邊界與持久化。
 - `install_kernel()`、`subscribe()`、`build_worker()` — 程序入口整合。
+- `push_after_commit()`、`mount_realtime()` — 即時推播（`realtime` extra）。
 
 ## Dependencies
-**Depends on:** 無內部 module；adapter 使用 PostgreSQL／RabbitMQ，port 使用 FastAPI／FastStream／PgQueuer。
+**Depends on:** 無內部 module；adapter 使用 PostgreSQL／RabbitMQ，port 使用 FastAPI／FastStream／PgQueuer；`realtime` extra 另加 python-socketio。
 **Used by:** `example` 與 `template` 產生的獨立服務。
 
 ## Modification Guide
@@ -28,13 +29,14 @@
 2. 修改交易與儲存 → [Adapter](./adapter.md)；同步檢查入口交易生命週期。
 3. 修改 wire contract → [Port](./port.md)；比對 producer 與 consumer。
 4. 修改開發檢查 → [Devtools](./devtools.md)；執行 kernel 與 example 的 `make check`。
-5. 改分發 → pyproject／wheel tests → Git／path 與 Linux image；四個 py.typed、正式 migrations 必須可讀，test-only branch 不進 wheel。
+5. 改即時推播 → [Realtime Push](./realtime.md)；room 命名只有 adapter 一個 owner。
+6. 改分發 → pyproject／wheel tests → Git／path 與 Linux image；四個 py.typed、正式 migrations 必須可讀，test-only branch 不進 wheel。
 
 ## Ripple Effects
 - 公開型別與序列化變更影響 `example` 的 domain、controller、schema 與資料庫。
 
 ## Pitfalls
-- 分層為 port → adapter → core；runtime packages 不可依賴 devtools。
+- 分層為 port → adapter → core；runtime packages 不可依賴 devtools；`fast_ddd` 不可 import `socketio`，realtime 模組不由套件 `__init__` import。
 - 共用設定由 composition root 注入；不可讓 core 直接讀 settings。
 - MQ contract 測試以 event ID 對照 organization 與 payload，另驗數量與完整 ID 集合；handler 觀測順序不可當成發送順序。
 
@@ -43,6 +45,7 @@
 - [Adapter](./adapter.md) — 交易、ORM、訊息與 task enqueue。
 - [Port](./port.md) — HTTP、MQ 與 worker wrappers。
 - [Devtools](./devtools.md) — 靜態品質工具。
+- [Realtime Push](./realtime.md) — commit 後推播、Socket.IO 認證與 room 權限。
 <!-- prospec:auto-end -->
 <!-- prospec:user-start -->
 <!-- prospec:user-end -->

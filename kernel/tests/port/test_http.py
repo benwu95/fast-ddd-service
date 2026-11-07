@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from fast_ddd_adapter.orm import DomainEventModel
+from fast_ddd_port.problems import kernel_problem, problem_json, problem_response
 from fast_ddd_port.testing import TokenFactory
 from tests.port.app_under_test import FRONTEND, JWT_SETTINGS, build_app
 from tests.telemetry import Telemetry
@@ -317,3 +318,17 @@ async def test_concurrent_requests_keep_their_own_context(
     }
     assert await event_context(session_factory) == expected
     assert len({trace_id for _, trace_id in expected.values()}) == 10
+
+
+def test_problem_json_is_the_problem_response_body() -> None:
+    problem = kernel_problem("auth.permission_denied", "missing permission invoice:void")
+    body = problem_json(problem)
+    assert body == {
+        "type": "/problems/auth.permission_denied",
+        "title": "Permission denied",
+        "status": 403,
+        "detail": "missing permission invoice:void",
+        "code": "auth.permission_denied",
+        "params": {},
+    }
+    assert problem_response(problem).body == problem_response(problem).render(body)

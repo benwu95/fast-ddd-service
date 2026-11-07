@@ -25,6 +25,8 @@
   ".agents/skills/fast-ddd/references/example/app/core/billing/domain/repository.py",
   ".agents/skills/fast-ddd/references/example/app/core/billing/use_case/__init__.py",
   ".agents/skills/fast-ddd/references/example/app/core/billing/use_case/invoice_use_case.py",
+  ".agents/skills/fast-ddd/references/example/app/port/billing/__init__.py",
+  ".agents/skills/fast-ddd/references/example/app/port/billing/fields.py",
   ".agents/skills/fast-ddd/references/example/app/port/message_queue/__init__.py",
   ".agents/skills/fast-ddd/references/example/app/port/message_queue/customer/__init__.py",
   ".agents/skills/fast-ddd/references/example/app/port/message_queue/customer/customer_subscriber.py",

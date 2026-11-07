@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import AsyncGenerator
 from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -7,20 +6,32 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 from fast_ddd.context import User, current_organization_id, current_user
+from fast_ddd_adapter.infrastructure import infrastructure as kernel_infrastructure
 from fast_ddd_adapter.testing import unit_of_work_scope
 from fast_ddd_port.tasks import RetryPolicy, TaskEnvelope, TaskRegistry, build_worker
 from pgqueuer import PgQueuer
 from pgqueuer.types import QueueExecutionMode
+from pydantic import ValidationError
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.adapter.controller.billing.invoice_commands import CreateInvoiceCommand
-from app.adapter.controller.billing.invoice_controller import InvoiceController
-from app.adapter.controller.billing.task_names import DAILY_SUMMARY_SCHEDULE, SEND_DAILY_SUMMARY
+from app.adapter.controller.billing.invoice_commands import (
+    CreateInvoiceCommand,
+    UpdateInvoiceCommand,
+)
+from app.adapter.controller.billing.invoice_controller import BULK_CHUNK_SIZE, InvoiceController
+from app.adapter.controller.billing.task_names import (
+    DAILY_SUMMARY_SCHEDULE,
+    SEND_DAILY_SUMMARY,
+    VOID_INVOICES,
+)
+from app.adapter.repository.billing.invoice_repository import InvoiceRepository
 from app.bootstrap import Runtime
-from app.core.billing.domain.invoice import Invoice
-from app.port.task.billing.invoice_tasks import DailySummaryData
-from app.task_worker import build_task_worker, driver_dsn
+from app.core.billing.domain.events import InvoiceVoided
+from app.core.billing.domain.invoice import CustomerId, Invoice, InvoiceId, InvoiceStatus
+from app.port.task.billing.invoice_tasks import DailySummaryData, VoidInvoicesData
+from app.task_worker import build_task_worker
 from app.wiring import wire_tasks
 from tests.conftest import Infrastructure
 from tests.runtime.support import settings
@@ -33,13 +44,6 @@ DOER = User(id="user-1")
 
 class Boom(Exception):
     pass
-
-
-@pytest.fixture
-async def connection(database_url: str) -> AsyncGenerator[asyncpg.Connection]:
-    connection = await asyncpg.connect(driver_dsn(database_url))
-    yield connection
-    await connection.close()
 
 
 async def drain(connection: asyncpg.Connection, factory: Factory) -> None:
@@ -133,6 +137,185 @@ async def test_missing_invoice_fails_once_and_unavailable_service_is_retried(
     assert [status for _, status, _ in await jobs(session_factory)] == ["failed", "failed"]
 
 
+async def test_transient_failure_retries_the_whole_void_chunk(
+    session_factory: Factory,
+    infrastructure: Infrastructure,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
+) -> None:
+    del infrastructure
+    customer = uuid4()
+    controller = InvoiceController()
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        invoices = [
+            await controller.create(
+                CreateInvoiceCommand(None, content(f"N-{n}", customer_id=customer))
+            )
+            for n in range(3)
+        ]
+    flaky = invoices[1].id
+    # Once in the whole-batch phase and once more for the item in the fallback.
+    failures_left = 2
+
+    async def fail_twice(event: InvoiceVoided) -> None:
+        nonlocal failures_left
+        if event.aggregate_id == flaky and failures_left:
+            failures_left -= 1
+            raise Boom
+
+    kernel_infrastructure().event_bus.subscribe(InvoiceVoided, fail_twice)
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        await controller.enqueue_customer_invoice_voids(CustomerId(customer), "deactivated")
+
+    await drain(connection, session_factory)
+
+    assert failures_left == 0
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        statuses = {(await controller.get(invoice.id)).status for invoice in invoices}
+    assert statuses == {InvoiceStatus.VOIDED}
+    assert VOID_INVOICES not in {entrypoint for entrypoint, _, _ in await jobs(session_factory)}
+
+
+async def test_invoice_moved_to_another_customer_after_enqueue_is_not_voided(
+    session_factory: Factory,
+    infrastructure: Infrastructure,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
+) -> None:
+    del infrastructure
+    customer = CustomerId(uuid4())
+    controller = InvoiceController()
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        kept, moved = [
+            await controller.create(
+                CreateInvoiceCommand(None, content(f"N-{n}", customer_id=customer))
+            )
+            for n in range(2)
+        ]
+        await controller.enqueue_customer_invoice_voids(customer, "deactivated")
+        other = content(customer_id=uuid4()).customer
+        await controller.update(UpdateInvoiceCommand(moved.id, moved.version, customer=other))
+
+    await drain(connection, session_factory)
+
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        statuses = [(await controller.get(invoice.id)).status for invoice in (kept, moved)]
+    assert statuses == [InvoiceStatus.VOIDED, InvoiceStatus.ACTIVE]
+
+
+async def test_invoice_cannot_move_to_another_customer_while_its_chunk_is_voided(
+    session_factory: Factory,
+    infrastructure: Infrastructure,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del infrastructure
+    customer = CustomerId(uuid4())
+    controller = InvoiceController()
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        kept, moved = [
+            await controller.create(
+                CreateInvoiceCommand(None, content(f"N-{n}", customer_id=customer))
+            )
+            for n in range(2)
+        ]
+        await controller.enqueue_customer_invoice_voids(customer, "deactivated")
+    reread = InvoiceRepository.active_ids_of_customer
+    moves_blocked: list[bool] = []
+
+    # A concurrent PATCH between the task's re-read and its void: it must wait for the task.
+    async def move_after_reread(
+        self: InvoiceRepository, customer_id: CustomerId, **options: Any
+    ) -> list[InvoiceId]:
+        found = await reread(self, customer_id, **options)
+        if options.get("among") is not None:
+            try:
+                async with session_factory.begin() as other:
+                    await other.execute(text("SET LOCAL lock_timeout = '200ms'"))
+                    await other.execute(
+                        text("UPDATE billing_invoice SET customer_id = :other WHERE id = :id"),
+                        {"other": uuid4(), "id": moved.id},
+                    )
+            except DBAPIError:
+                moves_blocked.append(True)
+            else:
+                moves_blocked.append(False)
+        return found
+
+    monkeypatch.setattr(InvoiceRepository, "active_ids_of_customer", move_after_reread)
+    await drain(connection, session_factory)
+
+    assert moves_blocked == [True]
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        voided = [await controller.get(invoice.id) for invoice in (kept, moved)]
+    assert [(i.status, i.content.customer.id) for i in voided] == [
+        (InvoiceStatus.VOIDED, customer)
+    ] * 2
+
+
+async def test_invoice_locked_by_another_transaction_is_voided_once_released(
+    session_factory: Factory,
+    infrastructure: Infrastructure,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del infrastructure
+    customer = CustomerId(uuid4())
+    controller = InvoiceController()
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        free, locked = [
+            await controller.create(
+                CreateInvoiceCommand(None, content(f"N-{n}", customer_id=customer))
+            )
+            for n in range(2)
+        ]
+        await controller.enqueue_customer_invoice_voids(customer, "deactivated")
+    reread = InvoiceRepository.active_ids_of_customer
+
+    # Another transaction holds the row while the task re-reads; the task must wait for it.
+    async def reread_while_locked(
+        self: InvoiceRepository, customer_id: CustomerId, **options: Any
+    ) -> list[InvoiceId]:
+        if options.get("among") is None:
+            return await reread(self, customer_id, **options)
+        async with session_factory() as other:
+            await other.execute(
+                text("SELECT id FROM billing_invoice WHERE id = :id FOR UPDATE"), {"id": locked.id}
+            )
+
+            async def release() -> None:
+                await asyncio.sleep(0.2)
+                await other.commit()
+
+            releasing = asyncio.create_task(release())
+            found = await reread(self, customer_id, **options)
+            await releasing
+        return found
+
+    monkeypatch.setattr(InvoiceRepository, "active_ids_of_customer", reread_while_locked)
+    await drain(connection, session_factory)
+
+    with unit_of_work_scope(session_factory, user=DOER, organization_id=organization_id):
+        statuses = [(await controller.get(invoice.id)).status for invoice in (free, locked)]
+    assert statuses == [InvoiceStatus.VOIDED] * 2
+
+
+@pytest.mark.parametrize("reason", ["", "x" * 201], ids=["empty", "too_long"])
+def test_void_invoices_payload_reason_fits_the_column(reason: str) -> None:
+    data = {"customerId": str(uuid4()), "invoiceIds": [str(uuid4())], "reason": reason}
+    with pytest.raises(ValidationError):
+        VoidInvoicesData.model_validate(data)
+
+
+@pytest.mark.parametrize("count", [0, BULK_CHUNK_SIZE + 1])
+def test_void_invoices_payload_holds_one_chunk(count: int) -> None:
+    data = {"customerId": str(uuid4()), "invoiceIds": [str(uuid4()) for _ in range(count)]}
+    with pytest.raises(ValidationError):
+        VoidInvoicesData.model_validate({**data, "reason": "deactivated"})
+
+
 async def test_daily_summary_fans_out_per_organization(
     session_factory: Factory,
     infrastructure: Infrastructure,
@@ -171,7 +354,11 @@ def test_worker_registers_tasks_and_the_schedule(
     wire_tasks(registry)
     worker = build_worker(connection, registry, session_factory)
 
-    assert set(registry.tasks) == {"billing.send_void_notice", "billing.send_daily_summary"}
+    assert set(registry.tasks) == {
+        "billing.send_void_notice",
+        "billing.send_daily_summary",
+        "billing.void_invoices",
+    }
     schedules = {str(key.entrypoint) for key in worker.sm.registry}
     assert schedules == {DAILY_SUMMARY_SCHEDULE}
 
@@ -207,6 +394,7 @@ async def test_service_worker_composes_real_registry_and_runtime_session_factory
     assert set(calls[0][1].tasks) == {
         "billing.send_void_notice",
         "billing.send_daily_summary",
+        "billing.void_invoices",
     }
     assert {str(key.entrypoint) for key in worker.sm.registry} == {DAILY_SUMMARY_SCHEDULE}
     invoice = await voided_invoice(session_factory, organization_id)

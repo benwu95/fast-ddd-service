@@ -11,7 +11,7 @@ Dependencies point inward: `app.port` → `app.adapter` → `app.core`.
 | `app/core/<context>/domain/` | aggregates (`AggregateRoot` subclasses), value objects, domain events, `DomainError` subclasses, repository Protocols | stdlib, pendulum, `fast_ddd` | Pydantic, SQLAlchemy, FastAPI, FastStream, `fast_ddd_adapter`, `fast_ddd_port`, `app.settings` |
 | `app/core/<context>/use_case/` | use cases | same as domain | same as domain |
 | `app/adapter/` | controllers and command dataclasses, repositories and ORM models, event handlers, outbound clients | SQLAlchemy, `fast_ddd_adapter`, `fast_ddd` | FastAPI, `fast_ddd_port`, `app.settings` |
-| `app/port/` | `restful/` routers and schemas, `message_queue/` subscribers, `task/` task handlers | FastAPI, FastStream, Pydantic, `fast_ddd_port`, controllers | `app.adapter.repository` |
+| `app/port/` | `restful/` routers and schemas, `message_queue/` subscribers, `task/` task handlers, and capability subpackages the transports share (Shared code below) | FastAPI, FastStream, Pydantic, `fast_ddd_port`, controllers | `app.adapter.repository` |
 
 What each layer does:
 

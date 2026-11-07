@@ -406,8 +406,8 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
   - 逐筆 fallback 時，每一筆各包一個 SAVEPOINT，取代「每筆一個 transaction」。
   - MQ 訊息暫存和「已儲存的 aggregate」紀錄都支援標記與回復，由 `SessionProvider.savepoint()` 統一處理：rollback 到某個 SAVEPOINT 時，同時丟棄這個 SAVEPOINT 之後暫存的訊息和儲存紀錄。否則整批處理已經儲存過的 aggregate，在逐筆 fallback 中再次儲存時會被誤判為重複儲存。
   - 訊息仍然在最外層 commit 之後才發送。
-  - 這樣 MQ 分段處理大量作業時，確定性的失敗（`DomainError`，例如資料已作廢）只影響那一筆：其他筆數照常 commit，失敗的筆數寫 warning log。
-  - **非 HTTP 呼叫者的 `BatchOutcome`**（MQ subscriber、event handler 中的批次）：沒有 207 回應可以回報。只要有任何一筆是暫時性失敗（`concurrency.lock_conflict` 或 `UnexpectedFailure`），runner 在逐筆處理結束後丟出例外，讓 subscriber wrapper rollback 整則訊息並重新排隊（第 11 節），由重送整批重試，重試次數用完後送進 DLQ。因為整則訊息都被 rollback，沒有部分 commit，重送時不會重複套用成功的筆數。
+  - 這樣每個背景工作處理一段大量作業時，確定性的失敗（`DomainError`，例如資料已作廢）只影響那一筆：其他筆數照常 commit，失敗的筆數寫 warning log。
+  - **非 HTTP 呼叫者的 `BatchOutcome`**（背景工作、MQ subscriber、event handler 中的批次）：沒有 207 回應可以回報。只要有任何一筆是暫時性失敗（`concurrency.lock_conflict` 或 `UnexpectedFailure`），runner 在逐筆處理結束後丟出例外，讓外層的 wrapper rollback 整個 unit of work 再重試：背景工作依 `RetryPolicy` 退避重試，用完後保留為 failed（第 11.1 節）；MQ 訊息重新排隊，重試次數用完後送進 DLQ（第 11 節）。因為整個 unit of work 都被 rollback，沒有部分 commit，重試時不會重複套用成功的筆數。
 - **`SessionProvider` 的規則**（修正原版）：只有最外層 scope（計數歸零時）可以 commit 或 rollback；巢狀 scope 遇到例外只往上丟，不呼叫 `rollback()`；`__aexit__` 收到例外時 rollback，沒有例外才 commit。原版的 `EventHandlerHelper.connect_db_session` 在巢狀 scope 中直接 rollback、`__aexit__` 不檢查例外就 commit，兩者都不沿用。
 - **巢狀 scope 不可以吞掉資料庫例外**：PostgreSQL 在 SQL 失敗後會把整個 transaction 標成 aborted，之後的語句全部失敗。巢狀呼叫者如果需要「這一段失敗也不影響外層」，必須用 SAVEPOINT（`session.begin_nested()`）包住那一段，kernel 的 `SessionProvider` 提供對應的 `savepoint()`。
 - **資料庫錯誤的轉換在 adapter，單筆和批次都一樣**：controller base（單筆）和批次 runner（逐筆模式）都依 constraint 名稱（第 7.2 節的 `naming_convention`）把 IntegrityError 轉成 `DomainError`，例如主鍵重複轉成 `ALREADY_EXISTS`。constraint 名稱從 `IntegrityError.orig.__cause__.constraint_name`（asyncpg 的例外）取得，錯誤類型依 `sqlstate` 判斷：`23505` 唯一鍵重複、`55P03` 鎖定逾時（`lock_not_available`）、`40P01` deadlock。（Phase 1 spike 已實測 23505 和 55P03。）
@@ -450,13 +450,13 @@ controller base 和批次 runner 實作為 `fast_ddd_adapter.controller` 的兩�
   - **總數**：計入同一個 unit of work 中交給 event bus 的每一個事件（不論有沒有 handler 訂閱），剛好等於上限時允許。計數由 `SessionProvider` 持有，和 MQ 訊息暫存一樣隨 SAVEPOINT 回復，transaction 結束時歸零，所以整批處理階段回復後的逐筆 fallback 不會被先前的計數拖累。
   - **調整**：`fast_ddd_adapter.infrastructure.configure(..., max_event_chain_depth=10, max_events_per_unit_of_work=10_000)`，小於 1 時丟出 `ValueError`。
   - **失敗**：`EventChainLimitExceededError` 不是 `DomainError`：HTTP 回 500 `server.internal_error`，MQ 依「其他例外」重新排隊、重試用完後送進 DLQ；批次 runner 的處理見上方批次 runner（整批階段不進入 fallback；最外層的逐筆階段只讓該筆失敗）。handler 不可以用 `except Exception` 吞掉巢狀呼叫的例外，否則也會吞掉上限。
-  - **升級影響**：上限對既有服務是新的限制，既有連鎖超過預設值時會開始失敗。同一個 unit of work 內以多次 `run_batch` 分段處理大量作業時（例如 MQ subscriber 對一位客戶的全部發票每 100 筆呼叫一次），事件總數會跨段累計，需要調高 `max_events_per_unit_of_work`，或改為每一段排入 TaskQueue，各自成為一個 unit of work。單一 HTTP 批次在整批處理階段的事件總數超過上限時，整個請求回 500，不會降級為逐筆處理（見上方批次 runner）。
-  - 扇出會鎖住大量資料列時（例如 100 筆各觸發 10 個目標），handler 改為在同一個交易中排入 TaskQueue 分段處理（第 11.1 節）。
+  - **升級影響**：上限對既有服務是新的限制，既有連鎖超過預設值時會開始失敗。同一個 unit of work 內以多次 `run_batch` 分段處理大量作業時，事件總數會跨段累計，而且所有列鎖要到 commit 才釋放。數量沒有上限的作業改為每一段排入一個 TaskQueue 工作，各自成為一個 unit of work：參考服務收到 `CustomerDeactivated` 時，subscriber 只查出有效發票，每 100 張排入一個 `billing.void_invoices` 工作（`InvoiceController.enqueue_customer_invoice_voids`、`void_invoices`）；工作在自己的交易內以 `SELECT ... FOR UPDATE` 重新查出並鎖定其中仍屬於該客戶的有效發票再作廢，排入後改屬其他客戶的發票不受影響。只調高 `max_events_per_unit_of_work` 會把上限往後移，交易大小與鎖定時間仍然沒有上限。單一 HTTP 批次在整批處理階段的事件總數超過上限時，整個請求回 500，不會降級為逐筆處理（見上方批次 runner）。
+  - 扇出會鎖住大量資料列時（例如 100 筆各觸發 10 個目標），handler 改為在同一個交易中每段排入一個 TaskQueue 工作，各自成為一個 unit of work（第 11.1 節）。
 - 處理 `*Deleted` 事件的 handler 只能使用事件本身的資料：flush 之後 aggregate 已經不存在，載入不到。
 - **事件帶有來源 aggregate 的資訊**：`DomainEvent` 的基底欄位新增 `organization_id`、`aggregate_type`、`aggregate_id`，由 `AggregateRoot.add_event` 從 aggregate 複製過去。`save_many` 寫入 domain_event、adapter 組成 MQ 訊息時，都從事件讀取這些值，不需要再載入 aggregate，也不依賴 context。
 - **哪些事件要送到 MQ**：沿用原版的做法，由 adapter 的 event handler 決定。它訂閱需要對外發送的事件，組成第 7.4 節格式的訊息，放進 MQ 訊息暫存。core 不直接發送 MQ 訊息，所以 core 不定義 publisher 的 Protocol。
 
-**API（port）**：endpoint 格式和回應見第 9 節。批次 payload 用 Pydantic `max_length` 限制筆數上限（預設 100，可由各服務設定調整），控制鎖定時間和請求大小。常見 API 的上限（2026-10-17 查證）：SQS、SNS 為 10；Microsoft Graph `$batch` 為 20、DynamoDB BatchWriteItem 為 25；DynamoDB BatchGetItem 和 TransactWriteItems、HubSpot CRM 為 100、Salesforce sObject Collections 為 200；Kinesis PutRecords 為 500、Pub/Sub 和 Google Calendar 為 1000。需要整批原子性的 API 上限偏小，允許部分成功的 API 上限偏大；本專案是部分成功，但整批寫入時會鎖住所有資料列，所以取中間值 100。超過上限的大量作業，改走 MQ 分段處理。
+**API（port）**：endpoint 格式和回應見第 9 節。批次 payload 用 Pydantic `max_length` 限制筆數上限（預設 100，可由各服務設定調整），控制鎖定時間和請求大小。常見 API 的上限（2026-10-17 查證）：SQS、SNS 為 10；Microsoft Graph `$batch` 為 20、DynamoDB BatchWriteItem 為 25；DynamoDB BatchGetItem 和 TransactWriteItems、HubSpot CRM 為 100、Salesforce sObject Collections 為 200；Kinesis PutRecords 為 500、Pub/Sub 和 Google Calendar 為 1000。需要整批原子性的 API 上限偏小，允許部分成功的 API 上限偏大；本專案是部分成功，但整批寫入時會鎖住所有資料列，所以取中間值 100。超過上限的大量作業改為非同步處理：每段排入一個 TaskQueue 工作，各自成為一個 unit of work（見上方「連鎖的上限」的升級影響與第 11.1 節）。
 
 **不做的事**：不提供繞過 aggregate 的整批 SQL UPDATE。那樣做會跳過 domain 規則、archive 和事件紀錄，破壞已驗證架構的稽核能力。
 
@@ -838,7 +838,7 @@ X-Trace-Id: 4bf92f3577b34da6a3ce929d0e0e4736
 - PgQueuer 只能出現在 kernel 的實作中，服務的程式碼一律透過 `TaskQueue` 使用（import-linter 的 forbidden contract，第 6.2 節）。PgQueuer 的 1.0 在 2026 年 5 月才發布、只有一位維護者，這層介面讓日後換成其他實作（例如 Procrastinate，或自己寫的 Postgres 佇列）時，只需要改 kernel。
 - PgQueuer 鎖定版本；升級時檢查它的資料表結構是否變更（見下方 migration）。
 
-**誰排入工作**：和 MQ 訊息相同的做法（第 8.2 節），由 adapter 的 event handler 依 domain event 決定要排入哪些工作；core 不知道背景工作的存在。event handler 在步驟 4 分派時仍然在同一個 transaction 中，所以排入工作和業務資料一起 commit、一起 rollback。
+**誰排入工作**：和 MQ 訊息相同的做法（第 8.2 節），由 adapter 的 event handler 依 domain event 決定要排入哪些工作；core 不知道背景工作的存在。event handler 在步驟 4 分派時仍然在同一個 transaction 中，所以排入工作和業務資料一起 commit、一起 rollback。controller 也可以在自己的 `execute()` 中排入工作，用於扇出：cron 逐組織排入（`enqueue_daily_summaries`），以及 MQ 訊息把大量作業分段排入（`enqueue_customer_invoice_voids`，見第 8.2 節「連鎖的上限」）；排入工作同樣和該 unit of work 一起 commit。
 
 **同一個 transaction**：`TaskQueue` 的 PgQueuer 實作從 `SessionProvider` 目前的 SQLAlchemy `AsyncSession` 取得底層的 asyncpg 連線（`get_raw_connection()` 的 `driver_connection`），交給 PgQueuer 的 asyncpg driver 執行 enqueue。（Phase 1 spike 已實測，PgQueuer 1.6.0：用 `AsyncpgDriver(raw.driver_connection)` 在同一個 transaction 中 enqueue，rollback 時工作和業務資料一起消失，commit 時兩者一起寫入。）
 
@@ -1080,7 +1080,7 @@ Phase 2 先鎖定測試使用的 Copier 版本，實測 `_skip_if_exists` 搭配
 - **歸屬**：`.agents/skills/**` 與 `.claude/skills` 屬於 template 追蹤更新、服務可修改（第 15.1 節），登記進 `scripts/template-ownership.json`，並隨 recopy 同步到 example。服務修改 skill 後，以 `copier update` 合併上游變更（第 2 節原則 7）。
 - **版本**：`SKILL.md.jinja` 渲染不持久化的 `kernel_version`（第 3 節），供第 14.2 節的版本檢查。檢查指令由 template 追蹤，納入 template `Makefile` 的 `check`。
 - **參考程式碼**：服務 repo 沒有 `example/`。框架 repo 以腳本把參考服務中示範各工作流程所需的固定檔案清單複製到 `template/.agents/skills/fast-ddd/references/example/`。工作流程用到的檔案不只在 billing 目錄下，清單包含：
-  - billing 的 core、adapter（controller、event handler、repository）與 port（restful、task）；
+  - billing 的 core、adapter（controller、event handler、repository）與 port（restful、task，以及兩者共用欄位型別的 `app/port/billing/`）；
   - MQ consumer 的 `app/port/message_queue/customer/` 與對外 client 的 `app/adapter/notification/`；
   - 新增 bounded context 時要登記的 `app/wiring.py`、`app/adapter/repository/models.py`、`app/adapter/resources.py`、`app/settings.py`；
   - billing 的 migration；

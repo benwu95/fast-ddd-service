@@ -16,6 +16,7 @@ These files are NOT auto-loaded. The AI MUST actively read them at the start of 
 Load these specific convention files only when their topics are relevant to the task:
 - `prospec/ai-knowledge/_lessons-ledger.md`
 - `prospec/ai-knowledge/_module-readme-conventions.md`
+- `prospec/ai-knowledge/_playbook.md`
 - `prospec/ai-knowledge/_status-lifecycle.md`
 
 ## Modules

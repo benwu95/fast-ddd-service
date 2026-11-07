@@ -37,7 +37,7 @@
 - 事件 dispatch 在交易內，分派前檢查連鎖世代與事件總數；after-commit hooks 在外層 commit 後執行。
 
 ## Pitfalls
-- 事件總數跨同一 UoW 的多次 `run_batch` 累計、隨 SAVEPOINT 回復；超限在 `run_batch` 整批階段與巢狀的逐筆階段丟出；最外層的逐筆階段只讓該筆成為 `UnexpectedFailure`。
+- 事件總數跨同一 UoW 的多次 `run_batch` 累計、隨 SAVEPOINT 回復；超限在 `run_batch` 整批階段與巢狀的逐筆階段丟出；最外層的逐筆階段只讓該筆成為 `UnexpectedFailure`。數量無上限的作業由服務每段排入一個工作（example 的 `enqueue_customer_invoice_voids`）。
 - load 與 save 都檢查 tenant；`system_context(reason)` 才可明確跳過組織限制。
 - after-commit 發送沒有 durable outbox；commit 後程序終止可能遺失訊息。
 - PgQueuer 使用 session 的同一 raw connection；dedupe 衝突須受 SAVEPOINT 保護。

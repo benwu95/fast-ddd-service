@@ -19,7 +19,7 @@ class CustomerDeactivatedData(MessageModel):
 
 
 async def handle_customer_deactivated(_: Envelope, data: CustomerDeactivatedData) -> None:
-    await controller.void_customer_invoices(
+    await controller.enqueue_customer_invoice_voids(
         CustomerId(data.customer_id), reason="customer deactivated"
     )
 

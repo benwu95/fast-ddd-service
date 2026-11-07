@@ -134,6 +134,29 @@ async def test_locked_loads_use_a_fixed_order(
     assert "FOR UPDATE" in locking
 
 
+async def test_locked_customer_reread_uses_a_fixed_order(
+    session_factory: Factory, engine: AsyncEngine, organization_id: UUID
+) -> None:
+    customer = uuid4()
+    invoices = [
+        await issue(session_factory, organization_id, content(f"N-{i}", customer_id=customer))
+        for i in range(3)
+    ]
+
+    with count_statements(engine) as counter:
+        await in_unit_of_work(
+            session_factory,
+            organization_id,
+            lambda: InvoiceRepository().active_ids_of_customer(
+                CustomerId(customer), among=[i.id for i in invoices], lock=True
+            ),
+        )
+
+    locking = counter.statements[0]
+    assert "ORDER BY billing_invoice.id" in locking
+    assert locking.rstrip().endswith("FOR UPDATE")
+
+
 async def test_search_filters_sorts_and_pages(
     session_factory: Factory, organization_id: UUID
 ) -> None:

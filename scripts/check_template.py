@@ -22,6 +22,7 @@ REFERENCE_SOURCES = (
     "app/adapter/repository/models.py",
     "app/adapter/notification",
     "app/adapter/resources.py",
+    "app/port/billing",
     "app/port/message_queue/__init__.py",
     "app/port/message_queue/customer",
     "app/port/restful/__init__.py",

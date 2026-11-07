@@ -28,10 +28,10 @@ from app.core.billing.domain.invoice import (
     InvoiceLine,
     InvoiceStatus,
 )
+from app.port.billing.fields import Reason
 
 type Number = Annotated[str, Field(min_length=1, max_length=30)]
 type Note = Annotated[str, Field(max_length=500)]
-type Reason = Annotated[str, Field(min_length=1, max_length=200)]
 type SearchKeyField = Annotated[
     str, Field(pattern=r"^((starts|ends|equals):)?(number|customerName)$")
 ]

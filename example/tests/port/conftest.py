@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+import asyncpg
 import httpx2
 import pytest
 from fast_ddd_adapter.messaging import create_broker
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.bootstrap import Runtime
 from app.main import build_app
 from app.settings import Settings
+from app.task_worker import driver_dsn
 from tests.conftest import Infrastructure
 from tests.support import FRONTEND, JWT_SETTINGS, NOTIFICATION_URL
 
@@ -45,3 +47,10 @@ async def client(
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(transport=transport, base_url="http://test") as http:
         yield http
+
+
+@pytest.fixture
+async def connection(database_url: str) -> AsyncGenerator[asyncpg.Connection]:
+    connection = await asyncpg.connect(driver_dsn(database_url))
+    yield connection
+    await connection.close()

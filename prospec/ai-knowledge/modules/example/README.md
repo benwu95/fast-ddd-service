@@ -34,12 +34,14 @@
 2. 改資料 → invoice model／repository → `make migration name="..."` → migration tests。
 3. 加入口 → port wrapper → controller → wiring；composition 留在 bootstrap／entry points。
 4. 加通知 → event handler enqueue → task registry → NotificationClient → transport tests。
-5. 改 worker lifecycle → task_worker／settings → health、signal／cleanup tests；timeout oracle 須區分產品時限與測試 watchdog。
-6. 改共通骨架 → 先改 template，再由 generator 同步；業務初始化檔與 migration chain 保留。
-7. 改 skill 參考清單內的檔案（billing、customer consumer、notification、登記位置、對應測試）→ 執行 `make template-references` 同步 template 副本、example 副本與 ownership。
+5. 加數量無上限的大量作業 → 依 fast-ddd skill 的 `references/workflows/batch-operation.md` step 5 實作扇出與工作 → drain worker 驗證每個 UoW 的事件數。
+6. 改 worker lifecycle → task_worker／settings → health、signal／cleanup tests；timeout oracle 須區分產品時限與測試 watchdog。
+7. 改共通骨架 → 先改 template，再由 generator 同步；業務初始化檔與 migration chain 保留。
+8. 改 skill 參考清單內的檔案（billing、customer consumer、notification、登記位置、對應測試）→ 執行 `make template-references` 同步 template 副本、example 副本與 ownership。
 
 ## Ripple Effects
 - Invoice event 同時供 MQ 發送與 task enqueue；變更需檢查兩種用途。
+- `CustomerDeactivated` 只排入 `billing.void_invoices` 工作；message ack 時發票尚未作廢；工作在自己的交易內以 FOR UPDATE 重查並鎖定仍屬於該客戶的有效發票，作廢事件的 user 為 `task:billing.void_invoices`、沒有 parent event。
 
 ## Pitfalls
 - port 不直接依賴 repository；core 不讀 settings 或 adapter。

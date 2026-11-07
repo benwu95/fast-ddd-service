@@ -129,6 +129,7 @@ example/
                   domain/
                   use_case/
               port/
+                billing/
                 message_queue/
                   customer/
                 restful/
@@ -160,6 +161,7 @@ example/
         domain/
         use_case/
     port/
+      billing/
       message_queue/
         customer/
       restful/
@@ -226,6 +228,7 @@ template/
                   domain/
                   use_case/
               port/
+                billing/
                 message_queue/
                   customer/
                 restful/
@@ -271,7 +274,7 @@ template/
 
 - `.agents/` — 66 files: `.md`
 - `.claude/` — 66 files: `.md`
-- `prospec/` — 40 files: `.md`, `.yaml`, `(no extension)`
+- `prospec/` — 42 files: `.md`, `.yaml`, `(no extension)`
 - `example/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
 - `template/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
 - `example/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
@@ -290,5 +293,5 @@ template/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 584 |
+| Total files | 592 |
 | Directory Tree depth | 10 |

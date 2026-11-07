@@ -19,7 +19,7 @@ from app.adapter.controller.billing.invoice_commands import (
     SearchInvoicesQuery,
     UpdateInvoiceCommand,
 )
-from app.adapter.controller.billing.task_names import SEND_DAILY_SUMMARY
+from app.adapter.controller.billing.task_names import SEND_DAILY_SUMMARY, VOID_INVOICES
 from app.adapter.repository.billing.invoice_repository import InvoiceRepository
 from app.adapter.resources import resources
 from app.core.billing.domain.invoice import CustomerId, Invoice, InvoiceContent, InvoiceId
@@ -27,8 +27,8 @@ from app.core.billing.use_case.invoice_use_case import InvoiceUseCase
 
 logger = logging.getLogger(__name__)
 
-# Bulk work from messages runs in chunks of the HTTP batch limit, to bound how many rows
-# one statement locks.
+# Bulk work from messages runs one chunk of the HTTP batch limit per task, to bound how many
+# rows and events one unit of work holds.
 BULK_CHUNK_SIZE = 100
 
 
@@ -108,20 +108,59 @@ class InvoiceController:
             ),
         )
 
-    async def void_customer_invoices(self, customer_id: CustomerId, reason: str) -> None:
-        """Void every active invoice of a customer; transient failures raise for a retry."""
+    async def enqueue_customer_invoice_voids(self, customer_id: CustomerId, reason: str) -> None:
+        """Fan out one void task per chunk of a customer's active invoices."""
+        organization_id = _organization_id()
+
+        async def enqueue() -> None:
+            invoice_ids = await self._repository.active_ids_of_customer(customer_id)
+            for chunk in batched(invoice_ids, BULK_CHUNK_SIZE, strict=False):
+                await task_queue().enqueue(
+                    VOID_INVOICES,
+                    {
+                        "customerId": str(customer_id),
+                        "invoiceIds": [str(invoice_id) for invoice_id in chunk],
+                        "reason": reason,
+                    },
+                    organization_id=organization_id,
+                )
+
+        await execute(enqueue)
+
+    async def void_invoices(
+        self, customer_id: CustomerId, invoice_ids: Sequence[InvoiceId], reason: str
+    ) -> None:
+        """Void one chunk of a customer's invoices; transient failures raise for a retry.
+
+        The chunk was listed when the task was enqueued, so it is read again here, under row
+        locks held until the void commits: an invoice moved to another customer must not be voided.
+        """
         doer = current_user()
-        invoice_ids = await execute(lambda: self._repository.active_ids_of_customer(customer_id))
-        for chunk in batched(invoice_ids, BULK_CHUNK_SIZE, strict=False):
-            outcome = await run_batch(
-                [BatchItem(invoice_id, reason) for invoice_id in chunk],
-                batch=lambda batch: self._use_case.void_many(batch, doer),
-                single=lambda item: self._use_case.void(item.id, item.payload, None, doer),
-                raise_on_transient=True,
+        active = set(
+            await execute(
+                lambda: self._repository.active_ids_of_customer(
+                    customer_id, among=invoice_ids, lock=True
+                )
             )
-            for invoice_id, result in outcome.results.items():
-                if not isinstance(result, Invoice):
-                    logger.warning("invoice %s was not voided: %s", invoice_id, result)
+        )
+        for invoice_id in invoice_ids:
+            if invoice_id not in active:
+                logger.warning(
+                    "invoice %s was not voided: no longer an active invoice of customer %s",
+                    invoice_id,
+                    customer_id,
+                )
+        if not active:
+            return
+        outcome = await run_batch(
+            [BatchItem(invoice_id, reason) for invoice_id in invoice_ids if invoice_id in active],
+            batch=lambda batch: self._use_case.void_many(batch, doer),
+            single=lambda item: self._use_case.void(item.id, item.payload, None, doer),
+            raise_on_transient=True,
+        )
+        for invoice_id, result in outcome.results.items():
+            if not isinstance(result, Invoice):
+                logger.warning("invoice %s was not voided: %s", invoice_id, result)
 
     async def send_void_notice(self, invoice_id: InvoiceId) -> None:
         invoice = await self.get(invoice_id)

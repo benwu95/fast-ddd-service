@@ -1,15 +1,19 @@
 import asyncio
 import json
+from collections import Counter
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from typing import Any
 from uuid import UUID, uuid4
 
 import aio_pika
+import asyncpg
 import httpx2
 import pytest
 from fast_ddd.context import User
+from fast_ddd_adapter.infrastructure import configure, infrastructure
 from fast_ddd_adapter.messaging import create_broker
-from fast_ddd_adapter.orm import ProcessedMessage
+from fast_ddd_adapter.orm import DomainEventModel, ProcessedMessage
+from fast_ddd_adapter.session import SessionProvider, current_session_provider
 from fast_ddd_adapter.testing import unit_of_work_scope
 from fast_ddd_port.subscriber import declare_dead_letter_queue
 from fast_ddd_port.testing import TokenFactory
@@ -20,8 +24,10 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from app.adapter.controller.billing.invoice_commands import CreateInvoiceCommand
-from app.adapter.controller.billing.invoice_controller import InvoiceController
+from app.adapter.controller.billing.invoice_controller import BULK_CHUNK_SIZE, InvoiceController
+from app.adapter.controller.billing.task_names import VOID_INVOICES
 from app.bootstrap import build_runtime
+from app.core.billing.domain.events import InvoiceVoided
 from app.core.billing.domain.invoice import Invoice, InvoiceStatus
 from app.main import build_app
 from app.port.message_queue.customer.customer_subscriber import (
@@ -31,6 +37,7 @@ from app.port.message_queue.customer.customer_subscriber import (
 from app.settings import Settings
 from app.wiring import wire_consumer
 from tests.conftest import Infrastructure
+from tests.port.test_invoice_tasks import drain, jobs
 from tests.support import content
 
 type Factory = async_sessionmaker[AsyncSession]
@@ -103,14 +110,16 @@ async def processed(factory: Factory) -> int:
         return await session.scalar(select(func.count()).select_from(ProcessedMessage)) or 0
 
 
-async def invoices_of(factory: Factory, organization_id: UUID, customer: UUID) -> list[Invoice]:
+async def invoices_of(
+    factory: Factory, organization_id: UUID, customer: UUID, count: int = 2
+) -> list[Invoice]:
     controller = InvoiceController()
     with unit_of_work_scope(factory, user=User(id="t"), organization_id=organization_id):
         return [
             await controller.create(
-                CreateInvoiceCommand(None, content(f"N-{uuid4().hex[:6]}", customer_id=customer))
+                CreateInvoiceCommand(None, content(f"N-{uuid4().hex[:8]}", customer_id=customer))
             )
-            for _ in range(2)
+            for _ in range(count)
         ]
 
 
@@ -120,8 +129,19 @@ async def statuses(factory: Factory, organization_id: UUID, invoices: list[Invoi
         return {(await controller.get(invoice.id)).status.value for invoice in invoices}
 
 
+async def processed_once(factory: Factory) -> None:
+    async def done() -> bool:
+        return await processed(factory) == 1
+
+    await eventually(done)
+    await asyncio.sleep(0.5)
+
+
 async def test_deactivated_customer_has_its_invoices_voided_once(
-    broker: RabbitBroker, session_factory: Factory, organization_id: UUID
+    broker: RabbitBroker,
+    session_factory: Factory,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
 ) -> None:
     customer = uuid4()
     targeted = await invoices_of(session_factory, organization_id, customer)
@@ -130,14 +150,14 @@ async def test_deactivated_customer_has_its_invoices_voided_once(
     same_customer_elsewhere = await invoices_of(session_factory, other_organization, customer)
     message = envelope(organization_id, {"customerId": str(customer), "addedLater": True})
 
-    async def all_voided() -> bool:
-        return await statuses(session_factory, organization_id, targeted) == {"voided"}
-
     await send(broker, message)
     await send(broker, message)
-    await eventually(all_voided)
-    await asyncio.sleep(0.5)
+    await processed_once(session_factory)
+    await drain(connection, session_factory)
 
+    assert await statuses(session_factory, organization_id, targeted) == {
+        InvoiceStatus.VOIDED.value
+    }
     assert await processed(session_factory) == 1
     assert await statuses(session_factory, organization_id, other_customer) == {
         InvoiceStatus.ACTIVE.value
@@ -145,6 +165,59 @@ async def test_deactivated_customer_has_its_invoices_voided_once(
     assert await statuses(session_factory, other_organization, same_customer_elsewhere) == {
         InvoiceStatus.ACTIVE.value
     }
+
+
+async def test_invoices_past_the_event_limit_are_voided_one_chunk_per_unit_of_work(
+    broker: RabbitBroker,
+    amqp_url: str,
+    session_factory: Factory,
+    connection: asyncpg.Connection,
+    organization_id: UUID,
+) -> None:
+    kernel = infrastructure()
+    voided_per_unit_of_work: Counter[SessionProvider] = Counter()
+
+    async def count_voided(_: InvoiceVoided) -> None:
+        voided_per_unit_of_work[current_session_provider()] += 1
+
+    kernel.event_bus.subscribe(InvoiceVoided, count_voided)
+    configure(
+        session_factory=kernel.session_factory,
+        event_bus=kernel.event_bus,
+        publisher=kernel.publisher,
+        task_queue=kernel.task_queue,
+        max_events_per_unit_of_work=150,
+    )
+    customer = uuid4()
+    invoices = await invoices_of(session_factory, organization_id, customer, count=250)
+    message = envelope(organization_id, {"customerId": str(customer)})
+
+    await send(broker, message)
+    await send(broker, message)
+    await processed_once(session_factory)
+
+    assert await statuses(session_factory, organization_id, invoices) == {
+        InvoiceStatus.ACTIVE.value
+    }
+    assert [job[0] for job in await jobs(session_factory)] == [VOID_INVOICES] * 3
+    assert not voided_per_unit_of_work
+
+    await drain(connection, session_factory)
+
+    assert await statuses(session_factory, organization_id, invoices) == {
+        InvoiceStatus.VOIDED.value
+    }
+    assert await dead_letters(amqp_url) == []
+    assert await processed(session_factory) == 1
+    async with session_factory() as session:
+        voided_events = await session.scalar(
+            select(func.count())
+            .select_from(DomainEventModel)
+            .where(DomainEventModel.name == "InvoiceVoided")
+        )
+    assert voided_events == 250
+    assert len(voided_per_unit_of_work) == 3
+    assert max(voided_per_unit_of_work.values()) <= BULK_CHUNK_SIZE
 
 
 async def test_unusable_messages_go_to_the_dead_letter_queue(

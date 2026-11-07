@@ -132,12 +132,23 @@ class InvoiceRepository(RepositoryBase[InvoiceId, Invoice, InvoiceModel]):
             limit=limit,
         )
 
-    async def active_ids_of_customer(self, customer_id: CustomerId) -> list[InvoiceId]:
+    async def active_ids_of_customer(
+        self,
+        customer_id: CustomerId,
+        *,
+        among: Sequence[InvoiceId] | None = None,
+        lock: bool = False,
+    ) -> list[InvoiceId]:
         stmt = select(InvoiceModel.id).where(
             InvoiceModel.customer_id == customer_id,
             InvoiceModel.status == InvoiceStatus.ACTIVE.value,
             *self.tenant_conditions(),
         )
+        if among is not None:
+            stmt = stmt.where(InvoiceModel.id.in_(among))
+        if lock:
+            # Id order, as load_many locks, so concurrent chunks cannot deadlock.
+            stmt = stmt.order_by(InvoiceModel.id).with_for_update()
         return [InvoiceId(id) for id in (await self.session.scalars(stmt)).all()]
 
     async def organizations_issuing_since(self, since: pendulum.DateTime) -> list[UUID]:

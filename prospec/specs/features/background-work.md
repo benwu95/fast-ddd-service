@@ -1,7 +1,7 @@
 ---
 feature: background-work
 status: active
-last_updated: 2026-10-17
+last_updated: 2026-11-07
 story_count: 1
 req_count: 2
 ---
@@ -47,6 +47,8 @@ req_count: 2
 - WHEN 兩個獨立 worker 競爭同次到期排程，THEN 兩個獨立 worker 的 scheduler 同時競爭同一次到期排程時，正常運作情境只有一次 handler 執行；實際驗證 context、transaction 與 trace，不以只驗 registry 代替。
 - WHEN 排程衍生跨組織工作，THEN 排程本身沒有組織 context；跨組織彙總明確取得所需組織並逐組織衍生工作，衍生工作保留各自 organization，不把全域豁免帶進一般 handler。
 - WHEN 執行 Invoice 通知或每日彙總，THEN 參考服務完整示範 invoice event→通知工作與 cron→每日彙總；外部通知採用原介面的可重送識別 key，測試外部成功後本地失敗的重送結果，不將 DB rollback 解讀成撤銷外部 HTTP。
+- WHEN 參考服務收到 `CustomerDeactivated`，THEN subscriber 在處理 message 的交易內查出該客戶在該組織的有效發票，每 100 張排入一個作廢工作，與 inbox 紀錄一起 commit，本身不作廢發票；每個作廢工作在自己的 unit of work 中重新查出所帶發票裡仍屬於該客戶的有效發票並作廢，任一 unit of work 分派的事件數不超過 100，與有效發票總數無關。
+- WHEN 同一 `CustomerDeactivated` 重送，或作廢工作重試，THEN 相同 eventId 由 inbox 略過、不再排入工作；工作對已作廢、已刪除或已改屬其他客戶的發票記 warning 並略過，發票狀態與 `InvoiceVoided` 事件數與只處理一次相同。
 
 ---
 
@@ -75,4 +77,5 @@ req_count: 2
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-11-07 | bound-customer-invoice-voiding | MODIFIED REQ-KERNEL-008 | REQ-KERNEL-008 |
 | 2026-10-17 | replan-phase-one | 建立已驗收能力基準 | US-1, REQ-KERNEL-007, REQ-KERNEL-008 |

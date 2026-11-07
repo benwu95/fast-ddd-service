@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections.abc import AsyncGenerator, Callable, Generator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -14,8 +14,6 @@ from faststream.rabbit import RabbitBroker
 from opentelemetry.trace import SpanKind
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from testcontainers.core.container import DockerContainer
-from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from fast_ddd.context import (
     ContextNotSetError,
@@ -72,24 +70,6 @@ class RejectedCode(DomainError):
 class Seen:
     calls: list[tuple[str, UUID | None, UUID | None]]
     trace_ids: list[str | None]
-
-
-@pytest.fixture(scope="session")
-def rabbitmq() -> Generator[DockerContainer]:
-    container = (
-        DockerContainer("rabbitmq:4-management")
-        .with_exposed_ports(5672)
-        .waiting_for(LogMessageWaitStrategy("Server startup complete"))
-    )
-    with container:
-        yield container
-
-
-@pytest.fixture(scope="session")
-def amqp_url(rabbitmq: DockerContainer) -> str:
-    host = rabbitmq.get_container_host_ip()
-    port = rabbitmq.get_exposed_port(5672)
-    return f"amqp://guest:guest@{host}:{port}/"
 
 
 @pytest.fixture

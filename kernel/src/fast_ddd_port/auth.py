@@ -138,11 +138,16 @@ def principal_scope(principal: Principal) -> Generator[Principal]:
         _principal.reset(token)
 
 
+def ensure_permission(principal: Principal, permission: str) -> None:
+    """403 unless ``principal`` holds ``permission``; the rule behind ``require()``."""
+    if permission not in principal.permissions:
+        raise HttpProblem("auth.permission_denied", detail=f"missing permission {permission}")
+
+
 def require(permission: str) -> DependsParam:
     """Route dependency: 403 unless the token grants ``permission`` (``<aggregate>:<action>``)."""
 
     def check() -> None:
-        if permission not in current_principal().permissions:
-            raise HttpProblem("auth.permission_denied", detail=f"missing permission {permission}")
+        ensure_permission(current_principal(), permission)
 
     return Depends(check)

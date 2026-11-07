@@ -164,9 +164,14 @@ def outcome_problem(outcome: DomainError | UnexpectedFailure) -> Problem:
     return kernel_problem("server.internal_error")
 
 
+def problem_json(problem: Problem) -> dict[str, Any]:
+    """The problem+json body shared by HTTP responses and realtime acks."""
+    return problem.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
 def problem_response(problem: Problem, headers: Mapping[str, str] | None = None) -> JSONResponse:
     return JSONResponse(
-        problem.model_dump(mode="json", by_alias=True, exclude_none=True),
+        problem_json(problem),
         status_code=problem.status,
         media_type=PROBLEM_JSON,
         headers=dict(headers or {}),

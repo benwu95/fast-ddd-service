@@ -37,19 +37,22 @@ modules:
       - RepositoryBase
       - MessageModel
       - TaskRegistry
+      - push_after_commit
+      - mount_realtime
     aliases:
       - 共用核心
       - 交易
       - 租戶隔離
       - 訊息契約
+      - 即時推播
     rationale: 單一發佈套件集中處理跨服務基礎行為，四個 Python package 由 import contracts 分層
     relationships:
       depends_on: []
       used_by:
         - example
         - template
-    last_verified: 2026-11-06T15:20:56.196Z
-    source_digest: source-v1:9cf93aaaf0a68b64690574b59f95820befa22f83c80bd5cebc2478cd3a74278c
+    last_verified: 2026-11-06T20:01:21.809Z
+    source_digest: source-v1:425c3370589b85e07c3aeba6fe8cea57c8b008a458edcbc1262e3d8d6e105f2f
   - name: template
     description: 產生可直接客製化的單服務骨架，驗證更新合併與框架 example 漂移
     paths:
@@ -80,8 +83,8 @@ modules:
       used_by:
         - example
         - plugin
-    last_verified: 2026-11-06T14:29:19.994Z
-    source_digest: source-v1:2894d671fd6b4a9175797a76db79762d95a888dc86e1613d1a7b935dc3b6f61f
+    last_verified: 2026-11-06T17:52:39.180Z
+    source_digest: source-v1:d8305b96f753f803335f1bc48486b4c18bddc50a8e08cb567ec0ea1262dfb6ab
   - name: plugin
     description: 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 fast-ddd-init
     paths:

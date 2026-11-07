@@ -20,6 +20,10 @@ features:
       - plugin
       - template
     status: active
+  - feature: realtime-push
+    modules:
+      - kernel
+    status: active
   - feature: runtime-foundation
     modules:
       - example

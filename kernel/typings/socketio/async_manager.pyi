@@ -1,0 +1,9 @@
+import logging
+from typing import Any
+
+class AsyncManager:
+    server: Any
+    json: Any
+    def initialize(self) -> None: ...
+    def sid_from_eio_sid(self, eio_sid: str, namespace: str) -> str | None: ...
+    def _get_logger(self) -> logging.Logger: ...

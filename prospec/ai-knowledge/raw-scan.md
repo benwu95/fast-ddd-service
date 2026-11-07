@@ -188,6 +188,8 @@ kernel/
     migrations/
       versions/
     port/
+  typings/
+    socketio/
 prospec/
   ai-knowledge/
     modules/
@@ -269,7 +271,7 @@ template/
 
 - `.agents/` — 66 files: `.md`
 - `.claude/` — 66 files: `.md`
-- `prospec/` — 36 files: `.md`, `.yaml`, `(no extension)`
+- `prospec/` — 38 files: `.md`, `.yaml`, `(no extension)`
 - `example/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
 - `template/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
 - `example/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
@@ -288,5 +290,5 @@ template/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 568 |
+| Total files | 581 |
 | Directory Tree depth | 10 |

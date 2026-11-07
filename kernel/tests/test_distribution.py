@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -29,6 +30,16 @@ def test_wheel_contains_runtime_types_and_migrations_without_test_branch(tmp_pat
     }
     assert {f"fast_ddd_adapter/migrations/versions/{name}" for name in migrations} <= names
     assert not any("tests/" in name or "test_" in name for name in names)
+    with ZipFile(wheel) as archive:
+        (metadata,) = (name for name in names if name.endswith(".dist-info/METADATA"))
+        requires = [
+            line.removeprefix("Requires-Dist: ")
+            for line in archive.read(metadata).decode().splitlines()
+            if line.startswith("Requires-Dist: ")
+        ]
+    realtime = [line for line in requires if line.startswith(("python-socketio", "aio-pika"))]
+    assert len(realtime) == 2
+    assert all(line.endswith("extra == 'realtime'") for line in realtime), realtime
     run("uv", "venv", "--python", "3.13", str(tmp_path / ".venv"))
     python = str(tmp_path / ".venv/bin/python")
     run("uv", "pip", "install", "--python", python, "--no-deps", str(wheel))
@@ -51,3 +62,44 @@ print(json.dumps(sorted(path.name for path in resource.iterdir() if path.name.en
 """,
     )
     assert set(json.loads(output)) == migrations
+
+
+_WITHOUT_SOCKETIO = """
+import importlib, pkgutil, sys
+sys.modules['socketio'] = None
+sys.modules['engineio'] = None
+import fast_ddd, fast_ddd_adapter, fast_ddd_port
+realtime = {'fast_ddd_adapter.realtime', 'fast_ddd_port.realtime'}
+imported = []
+for package in (fast_ddd, fast_ddd_adapter, fast_ddd_port):
+    for module in pkgutil.walk_packages(package.__path__, package.__name__ + '.'):
+        if module.name not in realtime:
+            importlib.import_module(module.name)
+            imported.append(module.name)
+for name in sorted(realtime):
+    try:
+        importlib.import_module(name)
+    except ImportError as error:
+        print(name, error)
+    else:
+        raise AssertionError(name + ' imported without socketio')
+print(len(imported))
+"""
+
+
+def test_runtime_packages_import_without_the_realtime_extra() -> None:
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", _WITHOUT_SOCKETIO],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    *errors, count = result.stdout.splitlines()
+    assert int(count) > 20
+    assert [line.split(" ", 1)[0] for line in errors] == [
+        "fast_ddd_adapter.realtime",
+        "fast_ddd_port.realtime",
+    ]
+    assert all("install fast-ddd-kernel[realtime]" in line for line in errors)

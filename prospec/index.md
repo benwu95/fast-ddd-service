@@ -23,7 +23,7 @@ Load these specific convention files only when their topics are relevant to the 
 | Module | Keywords | Aliases | Status | Description | Rationale | Depends On |
 | --- | --- | --- | --- | --- | --- | --- |
 | **example** | Invoice, InvoiceController, billing, bootstrap, wiring, consumer, task_worker | 參考服務, 發票, 組裝 | Active | 可執行的 billing 參考服務，組裝 HTTP、MQ、task 與 cron 三種程序 | 獨立 workspace member，示範服務如何使用 kernel 實作單一 bounded context | kernel, template, plugin |
-| **kernel** | fast_ddd, fast_ddd_adapter, fast_ddd_port, fast_ddd_devtools, SessionProvider, RepositoryBase, MessageModel, TaskRegistry | 共用核心, 交易, 租戶隔離, 訊息契約 | Active | 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools | 單一發佈套件集中處理跨服務基礎行為，四個 Python package 由 import contracts 分層 | — |
+| **kernel** | fast_ddd, fast_ddd_adapter, fast_ddd_port, fast_ddd_devtools, SessionProvider, RepositoryBase, MessageModel, TaskRegistry, push_after_commit, mount_realtime | 共用核心, 交易, 租戶隔離, 訊息契約, 即時推播 | Active | 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools | 單一發佈套件集中處理跨服務基礎行為，四個 Python package 由 import contracts 分層 | — |
 | **template** | Copier, copy, update, recopy, drift, Docker | 服務骨架, 客製化, 漂移檢查 | Active | 產生可直接客製化的單服務骨架，驗證更新合併與框架 example 漂移 | 將生成與驗收工具獨立於服務業務與 kernel runtime，外層程式歸各服務擁有 | kernel |
 | **plugin** | fast-ddd-init, marketplace, plugin.json, SKILL.md, openai.yaml | 三家 plugin, 建立服務, 手動觸發 | Active | 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 fast-ddd-init | repo 根目錄即 plugin（source "./"），以三份 manifest 對應各 host，只暴露建立服務的 skill | template |
 

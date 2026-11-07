@@ -1,7 +1,7 @@
 ---
 product: fast-ddd-service
 version: phase-2
-last_updated: 2026-11-06
+last_updated: 2026-11-07
 ---
 
 # fast-ddd-service — Python DDD／Event-driven 參考架構
@@ -46,6 +46,11 @@ Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務�
 
 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 `fast-ddd-init`，以對應版本的 git tag 建立服務；版本一致性檢查讓 plugin、template 與 kernel 使用同一版本。
 → [features/plugin-distribution.md](features/plugin-distribution.md)
+
+### realtime-push
+
+以 optional extra 提供 commit 後才送出、必有對象的 Socket.IO 推播；連線以 JWT 認證，資源 room 依權限與組織前綴隔離，未採用的服務不受影響。
+→ [features/realtime-push.md](features/realtime-push.md)
 
 ### runtime-foundation
 

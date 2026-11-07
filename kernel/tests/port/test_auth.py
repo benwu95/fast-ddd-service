@@ -10,7 +10,8 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
 
-from fast_ddd_port.auth import JwtVerifier
+from fast_ddd.context import User
+from fast_ddd_port.auth import JwtVerifier, Principal, ensure_permission
 from fast_ddd_port.problems import HttpProblem
 from fast_ddd_port.settings import JwtSettings
 
@@ -181,3 +182,17 @@ async def test_configured_permission_shapes_and_global_identity(
         )
     assert principal.organization_id is None
     assert principal.permissions == {"invoice:read", "invoice:void"}
+
+
+def test_ensure_permission_accepts_granted_and_rejects_missing_permission() -> None:
+    principal = Principal(
+        user=User(id="user-1", name=None),
+        organization_id=uuid4(),
+        permissions=frozenset({"invoice:read"}),
+        claims={},
+    )
+    ensure_permission(principal, "invoice:read")
+    with pytest.raises(HttpProblem) as raised:
+        ensure_permission(principal, "invoice:void")
+    assert raised.value.code == "auth.permission_denied"
+    assert raised.value.detail == "missing permission invoice:void"

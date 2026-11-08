@@ -13,6 +13,7 @@ dev = [
     "asyncpg-stubs>=0.32,<0.33",
     "copier==9.19.1",
     "coverage>=7.10",
+    "fast-ddd-kernel[realtime]",
     "import-linter>=2.15",
     "pre-commit>=4.7",
     "pyright==1.1.414",

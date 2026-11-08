@@ -52,4 +52,4 @@ Placeholders as in `references/workflows/domain-command.md`. The example is batc
 
 - Never replace the batch with a bulk SQL `UPDATE`; it skips domain rules, events and archive.
 - Do not loop over the single controller method instead of `run_batch`; that is one unit of work per item and the round trips grow with N.
-- Other batch forms are recipes, used only on request: batch-create uses `create_batch` from `fast_ddd.batch` and `batch_response(..., success_status=201)`; batch-delete passes `success_status=204`.
+- Batch-create, batch-update and batch-delete are recipes, used only on request: `references/recipes/batch-operations.md`.

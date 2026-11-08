@@ -1,5 +1,9 @@
+import importlib
+import inspect
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import yaml
@@ -20,6 +24,27 @@ CODE_WORKFLOWS = (
     "background-task-and-cron",
 )
 WORKFLOWS = (*CODE_WORKFLOWS, "secret-protection")
+RECIPES = (
+    "export",
+    "batch-operations",
+    "archive-snapshot",
+    "operation-history",
+    "batch-event-handler",
+    "realtime-push",
+    "app-lib",
+)
+RECIPE_SECTIONS = ("When to use", "Files to change", "Steps", "Required tests")
+RECIPE_KERNEL_APIS = {
+    "batch-event-handler": ("subscribe_batch", "apply_event_batch"),
+    "realtime-push": (
+        "create_realtime_emitter",
+        "configure_realtime",
+        "push_after_commit",
+        "mount_realtime",
+    ),
+}
+KERNEL_NAME = re.compile(r"\bfast_ddd(?:_adapter|_port|_devtools)?(?:\.\w+)+")
+CALL_NAME = re.compile(r"\b(\w+)\(")
 CODE_WORKFLOW_SECTIONS = ("Files to change", "Rules to load", "Reference code", "Required tests")
 RULE_SECTIONS = {
     "layering": ("Layers", "Dependency rules", "Shared code"),
@@ -246,3 +271,153 @@ def test_cited_test_names_exist_in_the_reference_copy() -> None:
 
     assert cited
     assert sorted((path, name) for path, name in cited if name not in defined) == []
+
+
+def resolve_kernel_name(qualified: str) -> object:
+    parts = qualified.split(".")
+    for split in range(len(parts), 0, -1):
+        try:
+            target: object = importlib.import_module(".".join(parts[:split]))
+        except ModuleNotFoundError:
+            continue
+        for attribute in parts[split:]:
+            target = getattr(target, attribute)
+        return target
+    raise AssertionError(qualified)
+
+
+def kernel_callables(text: str) -> dict[str, list[object]]:
+    """Every callable a recipe can reach from the kernel names it mentions, by short name."""
+    table: dict[str, list[object]] = {}
+
+    def add(name: str, value: object) -> None:
+        if callable(value) and not name.startswith("_"):
+            table.setdefault(name, []).append(value)
+        if inspect.isclass(value):
+            for member, attribute in vars(value).items():
+                if not member.startswith("_") and callable(attribute):
+                    table.setdefault(member, []).append(attribute)
+
+    for qualified in KERNEL_NAME.findall(text):
+        target = resolve_kernel_name(qualified)
+        if isinstance(target, ModuleType):
+            for name, value in vars(target).items():
+                if getattr(value, "__module__", "").startswith("fast_ddd"):
+                    add(name, value)
+        else:
+            add(qualified.rsplit(".", 1)[1], target)
+    return table
+
+
+def top_level_keywords(text: str, start: int) -> set[str]:
+    """Keyword names inside the parentheses that open at ``start``, outside nested brackets."""
+    depth, index, keywords = 0, start, set[str]()
+    while index < len(text):
+        char = text[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                return keywords
+        elif depth == 1 and not (text[index - 1].isalnum() or text[index - 1] in "_."):
+            match = re.match(r"(\w+)=(?!=)", text[index:])
+            if match:
+                keywords.add(match.group(1))
+                index += len(match.group(0))
+                continue
+        index += 1
+    return keywords
+
+
+def kernel_calls(text: str) -> Iterator[tuple[str, set[str], list[object]]]:
+    table = kernel_callables(text)
+    for match in CALL_NAME.finditer(text):
+        name = match.group(1)
+        if name in table:
+            yield name, top_level_keywords(text, match.end() - 1), table[name]
+
+
+def accepts(function: object, keywords: set[str]) -> bool:
+    if not callable(function):
+        return False
+    try:
+        parameters = inspect.signature(function).parameters
+    except (TypeError, ValueError):
+        return False
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return True
+    return keywords <= set(parameters)
+
+
+def recipe(name: str) -> str:
+    return (SKILL_DIR / f"references/recipes/{name}.md").read_text()
+
+
+def test_skill_lists_every_recipe() -> None:
+    _, body = frontmatter(SERVICE_SKILL)
+    recipes = REFERENCE_PATH.findall(section(body, "Recipes"))
+
+    assert recipes == [f"references/recipes/{name}.md" for name in RECIPES]
+    assert sorted(path.stem for path in (SKILL_DIR / "references/recipes").glob("*.md")) == sorted(
+        RECIPES
+    )
+
+
+@pytest.mark.parametrize("name", RECIPES)
+def test_recipe_names_when_files_steps_and_tests(name: str) -> None:
+    text = recipe(name)
+    found = headings(text)
+
+    for heading in RECIPE_SECTIONS:
+        assert found.count(heading) == 1, (name, heading)
+        assert section(text, heading)
+    assert REFERENCE_PATH.findall(text)
+
+
+@pytest.mark.parametrize("name", RECIPES)
+def test_recipe_kernel_names_and_keywords_exist(name: str) -> None:
+    text = recipe(name)
+    checked = {call for call, _, _ in kernel_calls(text)}
+    unknown = [
+        (call, sorted(keywords))
+        for call, keywords, candidates in kernel_calls(text)
+        if not any(accepts(candidate, keywords) for candidate in candidates)
+    ]
+
+    assert unknown == []
+    assert set(RECIPE_KERNEL_APIS.get(name, ())) <= checked
+
+
+def test_recipe_kernel_check_rejects_unknown_keywords() -> None:
+    text = "Call `push_after_commit(name, 1, data, rooms=[x])` from `fast_ddd_adapter.realtime`."
+
+    assert [
+        (call, keywords)
+        for call, keywords, candidates in kernel_calls(text)
+        if not any(accepts(candidate, keywords) for candidate in candidates)
+    ] == [("push_after_commit", {"rooms"})]
+
+
+def test_export_recipe_bounds_rows_and_writes_text_cells() -> None:
+    text = recipe("export")
+
+    assert "MAX_EXPORT_ROWS = 10_000" in text
+    assert re.search(r"422[^\n]*export_too_large|export_too_large[^\n]*422", text)
+    assert set(re.findall(r"\blimit=(\w+)", text)) == {"MAX_EXPORT_ROWS", "1"}
+    steps = section(text, "Steps")
+    assert 'data_type = "s"' in steps
+    assert "ILLEGAL_CHARACTERS_RE" in steps
+    required = section(text, "Required tests")
+    assert "tests/test_error_catalog.py" in required
+    assert "\\x0b" in required
+
+
+def test_batch_operations_recipe_covers_each_form() -> None:
+    text = recipe("batch-operations")
+    steps = section(text, "Steps")
+
+    for form in ("Batch-create", "Batch-update", "Batch-delete"):
+        assert f"{form}, use case" in steps
+    for name in ("create_batch", "apply_batch", "success_status=201", "success_status=204"):
+        assert name in steps

@@ -2,7 +2,7 @@
 
 ## When to use
 
-- Work this service triggers itself that must run asynchronously and must not be lost: external calls that need backoff retries, exports, imports, delayed work, or a large fan-out split into one task per chunk (`references/workflows/batch-operation.md` step 5).
+- Work this service triggers itself that must run asynchronously and must not be lost: external calls that need backoff retries, exports larger than the synchronous limit of `references/recipes/export.md`, imports, delayed work, or a large fan-out split into one task per chunk (`references/workflows/batch-operation.md` step 5).
 - Periodic work (a cron schedule) that the worker process runs.
 - Not for integration with other services; use `references/workflows/mq-consumer.md` to consume and `references/workflows/event-handler.md` to publish.
 

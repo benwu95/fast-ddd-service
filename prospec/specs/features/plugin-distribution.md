@@ -1,9 +1,9 @@
 ---
 feature: plugin-distribution
 status: active
-last_updated: 2026-10-20
-story_count: 2
-req_count: 3
+last_updated: 2026-11-08
+story_count: 3
+req_count: 4
 ---
 
 # plugin-distribution
@@ -61,6 +61,22 @@ repo 本身就是 plugin，三家 host 以各自的 manifest 安裝同一份內�
 
 ---
 
+### US-3: 從 repo 根目錄 README 了解框架 [P1]
+
+作為第一次接觸 fast-ddd-service repo 的開發者，我要在根目錄 README 讀到用途、repo 結構、建立服務的入口、服務內 skill 與 recipe、開發驗證指令與文件連結，以便不必先讀完設計文件就能開始使用或參與開發。
+
+**Acceptance Scenarios:**
+- WHEN 開啟 repo 根目錄，THEN README.md 涵蓋上述六個主題，安裝與建立服務的指令連到服務操作指引而不另行複製。
+- WHEN README 的相對連結目標或提到的 make target 不存在，THEN 框架 CI 失敗。
+
+#### REQ-PLUGIN-004: repo 根目錄 README
+repo 根目錄的 README 介紹框架並指向權威文件。
+
+- WHEN 開啟 repo 根目錄，THEN README.md 說明用途、repo 結構、建立服務的入口、服務內 skill 與 recipe、開發驗證指令與文件連結。
+- WHEN README 的相對連結目標或提到的 make target 不存在，THEN 框架 CI 失敗。
+
+---
+
 ## Edge Cases
 
 - `v<version>` tag 不存在、private repo 缺少 git 認證，或 host sandbox 拒絕網路、uv cache／tools 與 Copier git cache 的寫入：停止並回報，不改用其他 ref、來源或 plugin 安裝目錄。
@@ -89,5 +105,6 @@ repo 本身就是 plugin，三家 host 以各自的 manifest 安裝同一份內�
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-11-08 | add-fast-ddd-recipes | ADDED REQ-PLUGIN-004 | REQ-PLUGIN-004 |
 | 2026-10-20 | add-fast-ddd-service-skill | MODIFIED REQ-PLUGIN-002 | REQ-PLUGIN-002 |
 | 2026-10-20 | ship-fast-ddd-init-plugin | 新增三家共用 plugin 交付與版本一致性規格 | REQ-PLUGIN-001, REQ-PLUGIN-002, REQ-PLUGIN-003 |

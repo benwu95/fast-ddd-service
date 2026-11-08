@@ -15,7 +15,7 @@ Placeholders: `<context>` bounded context (snake_case), `<aggregate>` aggregate 
 - `PATCH`: `PATCH /<aggregates>/{<aggregate>_id:uuid}` with `If-Match`, 200 + `ETag` + full resource; unsent fields keep their value, `null` clears Optional fields only, nested value objects are replaced whole.
 - `delete`: `DELETE /<aggregates>/{<aggregate>_id:uuid}` with `If-Match`, 204; physical delete, audited by the `<Aggregate>Deleted` domain event.
 
-There is no PUT. Do not add a `status` enum, a domain command (void, approve, ...), a batch operation or export unless the user explicitly asks for it; the aggregate starts with the technical fields of `AggregateRoot` plus the business fields the user named.
+There is no PUT. Do not add a `status` enum, a domain command (void, approve, ...), a batch operation or export unless the user explicitly asks for it (then follow the matching workflow or the Recipes table in the skill's SKILL.md); the aggregate starts with the technical fields of `AggregateRoot` plus the business fields the user named.
 
 ## Files to change
 

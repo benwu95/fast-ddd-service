@@ -76,4 +76,4 @@ Python domain／DB／內部事件使用 snake_case，API／MQ 固定欄位使用
 |-------|--------|------------------|
 | Phase 1 | 已完成並通過 Grade S verify | kernel、Invoice 參考服務及永久行為規格 |
 | Phase 2 | 已完成並通過 Grade A verify | Copier 骨架、客製化更新、產物與漂移驗收；保留 late-capture 歷史限制 |
-| Phase 3 | 規劃中，尚未交付 | fast-ddd／fast-ddd-init、recipes 及 marketplace |
+| Phase 3 | 已交付（#4–#8，各 change 皆通過 Grade A 以上 verify） | fast-ddd-init 三家共用 plugin 與 marketplace、服務內 fast-ddd skill 與 recipes、即時推播 extra、批次 event handler 與事件連鎖上限 |

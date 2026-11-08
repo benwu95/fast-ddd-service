@@ -2,6 +2,8 @@
 
 讓 coding agent 快速建立 Python 後端服務的框架：以已驗證過的 DDD + Event-Driven 架構作為起點，共用核心放在可安裝的 kernel，服務外層由 Copier 產生、交給各服務自行修改，服務內附的 `fast-ddd` skill 引導 agent 依固定的分層與測試規則擴充功能。
 
+這套架構的原型來自 [benwu95/ddd-service-example](https://github.com/benwu95/ddd-service-example)，以及它用於序列化與對外格式的 [benwu95/dataclass-mixins](https://github.com/benwu95/dataclass-mixins)；搬移時保留與調整的部分見 [設計文件第 5 節](docs/design.md#5-架構搬移對照)。
+
 每個產生的服務是獨立 repo，擁有自己的 lock、venv 與部署生命週期；同一服務的 API、MQ consumer、背景工作 worker 是三種執行角色，不是三個服務。
 
 FastAPI、Pydantic v2、SQLAlchemy 2.1（async）、Alembic、PostgreSQL、FastStream（RabbitMQ）、PgQueuer、pendulum、OpenTelemetry；以 uv 管理套件，Python 3.13。品質工具為 ruff、Pyright strict、import-linter、pytest 與 testcontainers。版本與選型理由見 [設計文件第 4 節](docs/design.md#4-tech-stack)。

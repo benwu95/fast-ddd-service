@@ -15,7 +15,7 @@ Source: design §8.3 and §13. `make check` runs `kernel-version`, `lockcheck`, 
 | Background task tests (when a task handler exists) | a task enqueued in a transaction that rolls back is not enqueued; deterministic errors are not retried, transient errors are retried and then marked failed; running the same task twice gives the same result | `references/example/tests/port/test_invoice_tasks.py` |
 | Error catalog | code format and uniqueness; message placeholders match params; every service `DomainError` subclass is in the catalog | `references/example/tests/test_error_catalog.py` |
 
-A batch use case also needs a round-trip test: N=1 and N=50 send the same number of statements, measured with `count_statements(engine)` from `fast_ddd_adapter.testing`. See `test_batch_void_round_trips_do_not_grow_with_the_batch` in `references/example/tests/adapter/test_invoice_controller.py`. The condition holds only when the related event handlers do no database I/O.
+A batch use case also needs a round-trip test: N=1 and N=50 send the same number of statements, measured with `count_statements(engine)` from `fast_ddd_adapter.testing`. See `test_batch_void_round_trips_do_not_grow_with_the_batch` in `references/example/tests/adapter/test_invoice_controller.py`. The condition holds only when the related event handlers do no database I/O, or receive each dispatch's events as one list (`references/recipes/batch-event-handler.md`).
 
 Place tests by layer like the reference: `tests/core/`, `tests/adapter/`, `tests/port/`, each with an `__init__.py` (the template ships only `tests/__init__.py` and `tests/runtime/`).
 

@@ -140,6 +140,7 @@ example/
               adapter/
               core/
               port/
+          recipes/
           rules/
           workflows/
         scripts/
@@ -239,6 +240,7 @@ template/
               adapter/
               core/
               port/
+          recipes/
           rules/
           workflows/
         scripts/
@@ -274,8 +276,10 @@ template/
 
 - `.agents/` — 66 files: `.md`
 - `.claude/` — 66 files: `.md`
-- `prospec/` — 42 files: `.md`, `.yaml`, `(no extension)`
+- `prospec/` — 43 files: `.md`, `.yaml`, `(no extension)`
+- `example/.agents/skills/fast-ddd/references/recipes/` — 7 files: `.md`
 - `example/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
+- `template/.agents/skills/fast-ddd/references/recipes/` — 7 files: `.md`
 - `template/.agents/skills/fast-ddd/references/workflows/` — 7 files: `.md`
 - `example/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
 - `template/.agents/skills/fast-ddd/references/rules/` — 5 files: `.md`
@@ -293,5 +297,5 @@ template/
 
 | Metric | Value |
 |--------|-------|
-| Total files | 592 |
+| Total files | 609 |
 | Directory Tree depth | 10 |

@@ -1,6 +1,6 @@
 ---
 name: fast-ddd
-description: Build and change this fast-ddd service, including bounded contexts, aggregates, domain commands, batch operations, event handlers, MQ consumers, background tasks and cron schedules, following the fast-ddd kernel's layering and conventions; also sets up secret protection for the agent host.
+description: Build and change this fast-ddd service, including bounded contexts, aggregates, domain commands, batch operations, event handlers, MQ consumers, background tasks and cron schedules, following the fast-ddd kernel's layering and conventions; on request also adds exports, batch-create/update/delete, archive snapshots, operation history, batch event handlers, realtime push or shared app/lib code; also sets up secret protection for the agent host.
 ---
 
 # fast-ddd
@@ -38,6 +38,20 @@ Before reading or changing anything else, run `make kernel-version` from the ser
 | Consume messages from another service | `references/workflows/mq-consumer.md` |
 | Add a background task or a cron schedule | `references/workflows/background-task-and-cron.md` |
 | Set up secret protection for this agent host | `references/workflows/secret-protection.md` |
+
+## Recipes
+
+Recipes add features that no workflow generates by default. Use one only when the user explicitly asks for that feature, or when a workflow points to it; never add it on your own initiative.
+
+| Request | Recipe |
+|---|---|
+| Export a filtered list as a spreadsheet | `references/recipes/export.md` |
+| Batch-create, batch-update, batch-delete or another batch command | `references/recipes/batch-operations.md` |
+| Keep a snapshot of an aggregate at every change (archive) | `references/recipes/archive-snapshot.md` |
+| Show who changed a resource and when (operation history) | `references/recipes/operation-history.md` |
+| Handle an event's whole batch at once in an event handler | `references/recipes/batch-event-handler.md` |
+| Push changes to frontends in real time | `references/recipes/realtime-push.md` |
+| Share core code between bounded contexts (`app/lib`) | `references/recipes/app-lib.md` |
 
 ## Rules
 

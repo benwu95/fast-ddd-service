@@ -1,7 +1,7 @@
 ---
 product: fast-ddd-service
-version: phase-2
-last_updated: 2026-11-07
+version: phase-3
+last_updated: 2026-11-08
 ---
 
 # fast-ddd-service — Python DDD／Event-driven 參考架構
@@ -10,7 +10,7 @@ last_updated: 2026-11-07
 
 提供 Python AI 開發 skill 的共用架構基礎，讓服務開發者沿用可驗證的 DDD／Event-driven 邊界，避免每個服務重建 transaction、tenant、HTTP、MQ 與背景工作機制。
 
-Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務；Phase 2 提供可獨立使用及客製化的 Copier 服務骨架。後續再提供產生服務與 bounded context 的 skills／recipes。
+Phase 1 交付可安裝的 kernel 與可執行的 billing Invoice 參考服務；Phase 2 提供可獨立使用及客製化的 Copier 服務骨架；Phase 3 以三家共用的 plugin 提供建立服務的 `fast-ddd-init`，並在服務內提供擴充 bounded context 的 `fast-ddd` skill 與非預設功能的 recipes。
 
 ## Target Users
 
@@ -76,4 +76,4 @@ Python domain／DB／內部事件使用 snake_case，API／MQ 固定欄位使用
 |-------|--------|------------------|
 | Phase 1 | 已完成並通過 Grade S verify | kernel、Invoice 參考服務及永久行為規格 |
 | Phase 2 | 已完成並通過 Grade A verify | Copier 骨架、客製化更新、產物與漂移驗收；保留 late-capture 歷史限制 |
-| Phase 3 | 規劃中，尚未交付 | fast-ddd／fast-ddd-init、recipes 及 marketplace |
+| Phase 3 | 已交付（#4–#8，各 change 皆通過 Grade A 以上 verify） | fast-ddd-init 三家共用 plugin 與 marketplace、服務內 fast-ddd skill 與 recipes、即時推播 extra、批次 event handler 與事件連鎖上限 |

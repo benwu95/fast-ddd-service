@@ -1,9 +1,9 @@
 ---
 feature: service-template
 status: active
-last_updated: 2026-10-24
-story_count: 9
-req_count: 12
+last_updated: 2026-11-08
+story_count: 10
+req_count: 14
 ---
 
 # service-template
@@ -213,6 +213,33 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 
 ---
 
+### US-10: 依 recipe 加入非預設功能 [P0]
+
+作為在服務 repo 中以 agent 開發的後端開發者，我要在需要 export、其他批次操作、archive 快照、operation history、批次 event handler、即時推播或跨 bounded context 的共用程式碼時，由 `fast-ddd` 依 recipe 加入，以便這些功能只在要求時出現，並沿用 kernel 實際提供的 API 與必要測試。
+
+**Acceptance Scenarios:**
+- WHEN 檢視 `fast-ddd`，THEN SKILL.md 的 Recipes 表列出七份 recipe，每份寫明採用時機、修改範圍、步驟與必要測試，並註明只在使用者要求時採用。
+- WHEN 檢查 recipe 引用的 kernel 名稱與關鍵字參數，THEN 都能在 kernel 解析。
+- WHEN 依 export recipe 匯出，THEN 匯出筆數有上限，超過時以 422 拒絕整個請求。
+- WHEN 框架 CI 在產生的服務套用 `app/lib` recipe，THEN 服務的 `make check` 通過；未套用 contract 變更時失敗。
+
+#### REQ-TEMPLATE-013: skill 的非預設功能 recipe
+服務內的 `fast-ddd` 以 recipe 提供非預設功能的做法，使用者要求時才加入服務。
+
+- WHEN 使用者要求 export、batch-create／update／delete 或其他批次操作、archive 快照、operation history、批次 event handler、即時推播或服務內跨 bounded context 的共用程式碼，THEN skill 經 SKILL.md 的 Recipes 表找到對應 recipe，依其採用時機、修改檔案、步驟與必要測試加入，完成條件為 `make check` 通過；未要求時不產生這些功能。
+- WHEN 檢查 recipe，THEN 七份都有採用時機、修改範圍、步驟與必要測試，引用的路徑、測試名稱、kernel 名稱與關鍵字參數都存在。
+- WHEN 依 export recipe 匯出，THEN 匯出筆數有上限，超過時整個請求以 422 拒絕且不截斷，試算表中的字串一律寫成文字而非公式。
+
+---
+
+#### REQ-TEMPLATE-014: app/lib recipe 的 CI 驗收
+框架 CI 驗證 `app/lib` recipe 的 contract 變更可套用到產生的服務。
+
+- WHEN 對產生的服務套用 recipe 的 `.importlinter` 變更並加入 `app/lib` 最小模組，THEN 服務的 `make check` 通過；不套用 contract 變更時，contract 涵蓋檢查失敗。
+- WHEN template 的 `.importlinter` 改變使 recipe 的變更無法套用，THEN 框架 CI 失敗。
+
+---
+
 ## Edge Cases
 
 - 無效 kernel path／tag、缺少必要設定或 Docker／品質工具時明確失敗，不回退來源、不 skip 必要驗收。
@@ -248,6 +275,7 @@ Python 開發者可產生不含範例業務、具有自有環境且不含 agent 
 
 | Date | Change | Impact | Stories/REQs |
 |------|--------|--------|-------------|
+| 2026-11-08 | add-fast-ddd-recipes | ADDED REQ-TEMPLATE-013; ADDED REQ-TEMPLATE-014 | REQ-TEMPLATE-013, REQ-TEMPLATE-014 |
 | 2026-10-24 | render-utcdatetime-in-migrations | MODIFIED REQ-TEMPLATE-002 | REQ-TEMPLATE-002 |
 | 2026-10-20 | add-fast-ddd-service-skill | ADDED REQ-TEMPLATE-009; ADDED REQ-TEMPLATE-010; ADDED REQ-TEMPLATE-011; ADDED REQ-TEMPLATE-012; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-008 | REQ-TEMPLATE-009, REQ-TEMPLATE-010, REQ-TEMPLATE-011, REQ-TEMPLATE-012, REQ-TEMPLATE-001, REQ-TEMPLATE-008 |
 | 2026-10-20 | ship-fast-ddd-init-plugin | ADDED REQ-TEMPLATE-008; MODIFIED REQ-TEMPLATE-001; MODIFIED REQ-TEMPLATE-004 | REQ-TEMPLATE-008, REQ-TEMPLATE-001, REQ-TEMPLATE-004 |

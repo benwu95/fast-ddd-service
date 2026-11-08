@@ -22,8 +22,8 @@ modules:
         - template
         - plugin
       used_by: []
-    last_verified: 2026-11-07T13:45:00.810Z
-    source_digest: source-v1:011dd298333f8906e7ea0f95c438ffc23430d02d9e3f3ca4126f078be123f916
+    last_verified: 2026-11-07T18:51:46.959Z
+    source_digest: source-v1:dbfc3e217ef5c44af973dab162ec8393b2db9c26b0bb0f23ef13637e3fd7e1d1
   - name: kernel
     description: 可安裝的 DDD 共用套件，提供 core、adapter、port 與 devtools
     paths:
@@ -83,14 +83,15 @@ modules:
       used_by:
         - example
         - plugin
-    last_verified: 2026-11-07T13:45:00.810Z
-    source_digest: source-v1:5577260cf74c8206b9fcc90effa1a59fd4e98a287b128c6d5137885df170da9e
+    last_verified: 2026-11-07T18:51:46.959Z
+    source_digest: source-v1:c7a16488a06a616e0f23374b734a897b5e043c1bc39d2d9b900037b59ea75eb6
   - name: plugin
     description: 以 Claude Code、Codex 與 agy 共用的 plugin 交付只能手動呼叫的 fast-ddd-init
     paths:
       - .claude-plugin/**
       - plugin.json
       - skills/**
+      - README.md
     keywords:
       - fast-ddd-init
       - marketplace
@@ -107,4 +108,5 @@ modules:
         - template
       used_by:
         - example
-    last_verified: 2026-10-20T17:14:56.624Z
+    last_verified: 2026-11-07T17:18:45.778Z
+    source_digest: source-v1:4a47fc72fd27742053c1df05c3b6d39afbe5f113207588e5ff2d299bc064b04f

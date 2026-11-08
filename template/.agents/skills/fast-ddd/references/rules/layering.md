@@ -62,4 +62,6 @@ Adding `app/lib` needs all of these `.importlinter` changes in the same change. 
 - Add `app.lib` to the `source_modules` of the `core`, `composition` and `task-queue` contracts, so it has the same limits as `app.core`.
 - Never put it under `app/core/`: the `bounded-contexts` contract would treat it as a context that no other context may import.
 
+`references/recipes/app-lib.md` has the exact patch, the steps and the tests.
+
 Do not add a uv workspace `packages/` directory: it sits outside `root_packages`, so no contract or coverage check sees it. Code that other services need moves to its own repository instead.

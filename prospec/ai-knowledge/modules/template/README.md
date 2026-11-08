@@ -16,6 +16,7 @@
 | `scripts/check_versions.py` | plugin manifest、SKILL.md、template、kernel 五個版本來源一致性 |
 | `template/.agents/skills/` | 服務內 skill（目前為 `fast-ddd/`）；`template/.claude/skills` 是指向整個 `../.agents/skills` 的 symlink |
 | `template/.agents/skills/fast-ddd/` | SKILL.md 索引、`references/` 的 workflows、rules 與 decisions、由 example 產生的 `references/example/` 副本，以及 `scripts/check_kernel_version.py` |
+| `template/.agents/skills/fast-ddd/references/recipes/` | 七份非預設功能 recipe，SKILL.md 的 Recipes 表索引 |
 | `example/tests/template/` | 分發、更新、程序與容器驗收 |
 | `docs/template-operations.md` | 框架維護與服務操作入口 |
 
@@ -42,8 +43,9 @@
 3. 改 runtime 測試 → `template/tests/runtime/`；維持舊 cases 的 `runtime_cases.json` 對照。
 4. 改 drift → checker／snapshot owner → committed 差異、退役路徑與 dirty refusal 分別驗證；新增／退役骨架先更新 ownership 清單。
 5. 改驗收環境 → `support.PYTHON_VERSION` 與共享 fixtures → Git／path／容器回歸。
-6. 改服務 skill → `template/.agents/skills/` → `make template-references`（同步副本、recopy example、ownership）→ `test_service_skill_contract.py` 的結構與引用檢查；symlink 由 `_preserve_symlinks` 保留。
-7. 改版本檢查 → `check_kernel_version.py` → `test_kernel_version_check.py`（含經 `make` 執行與非 UTF-8 locale）；腳本不在服務 lint 範圍，由根目錄 `tooling` 明確傳入 ruff 與 pyright。
+6. 改服務 skill → `template/.agents/skills/` → `make template-references`（同步副本、recopy example、ownership）→ `test_service_skill_contract.py` 的結構與引用檢查；symlink 由 `_preserve_symlinks` 保留。answers 的 `_commit` 變動不提交。
+7. 改 recipe → 只引用參考副本已有的測試名稱，kernel 呼叫寫出所屬模組；改 `.importlinter` 時同步 `app-lib.md` 的 diff。
+8. 改版本檢查 → `check_kernel_version.py` → `test_kernel_version_check.py`（含經 `make` 執行與非 UTF-8 locale）；腳本不在服務 lint 範圍，由根目錄 `tooling` 明確傳入 ruff 與 pyright。
 
 
 ## Pitfalls

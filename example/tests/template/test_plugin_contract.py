@@ -153,3 +153,30 @@ def test_init_skill_hands_secret_protection_to_the_service_skill() -> None:
 
     assert len(items) == 3
     assert items[2] == HAND_OVER_SECRET_PROTECTION
+
+
+README_SECTIONS = ("Repo 結構", "建立服務", "服務內的 fast-ddd skill", "開發與驗證", "文件")
+
+
+def test_readme_links_and_make_targets_exist() -> None:
+    readme = (ROOT / "README.md").read_text()
+    sections = re.findall(r"^## (.+)$", readme, re.MULTILINE)
+    links = re.findall(r"\]\(([^)#]+)(?:#[^)]*)?\)", readme)
+    commands = re.findall(r"\bmake (?:-C (\S+) )?([a-z][a-z-]*)", readme)
+
+    assert set(README_SECTIONS) <= set(sections)
+    structure = readme.split("## Repo 結構", 1)[1].split("\n## ", 1)[0]
+    for path in ("kernel/", "template/", "example/", ".claude-plugin/", "docs/"):
+        assert f"`{path}`" in structure
+    local = [link for link in links if "://" not in link]
+    assert local
+    assert [link for link in local if not (ROOT / link).exists()] == []
+    assert commands
+    missing = [
+        (directory or ".", target)
+        for directory, target in commands
+        if not re.search(
+            rf"^{re.escape(target)}:", (ROOT / directory / "Makefile").read_text(), re.MULTILINE
+        )
+    ]
+    assert missing == []
